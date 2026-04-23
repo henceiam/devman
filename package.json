@@ -1,0 +1,11 @@
+{
+  "name": "devman",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel -r run dev",
+    "dev:server": "pnpm --filter @devman/server run dev",
+    "dev:client": "pnpm --filter @devman/client run dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint"
+  }
+}
