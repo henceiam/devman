@@ -50,6 +50,31 @@ export interface GitHubPR {
   draft: boolean;
 }
 
+export interface MissionSummary {
+  key: string;
+  summary: string;
+  shortName: string;
+  status: string;
+  statusCategory: string;
+}
+
+export interface MissionStory {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  assignee: string;
+  size: string | null;
+  milestone: string | null;
+  copyStatus: string | null;
+  type: string;
+}
+
+export interface MissionDetail {
+  epic: MissionSummary;
+  stories: MissionStory[];
+}
+
 export const api = {
   jira: {
     getProjects: () =>
@@ -66,5 +91,11 @@ export const api = {
       fetchJson<{ pulls: GitHubPR[] }>(
         `/github/pulls?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&state=${state}`,
       ),
+  },
+  missions: {
+    list: () =>
+      fetchJson<{ missions: MissionSummary[] }>("/missions"),
+    getDetail: (key: string) =>
+      fetchJson<MissionDetail>(`/missions/${encodeURIComponent(key)}`),
   },
 };
