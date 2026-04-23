@@ -5,7 +5,6 @@ export default function JiraPanel() {
   const [projects, setProjects] = useState<JiraProject[]>([]);
   const [selectedProject, setSelectedProject] = useState<string | null>(null);
   const [issues, setIssues] = useState<JiraIssue[]>([]);
-  const [issueTotal, setIssueTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,7 +26,6 @@ export default function JiraPanel() {
       .getIssues(selectedProject)
       .then((data) => {
         setIssues(data.issues);
-        setIssueTotal(data.total);
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -64,7 +62,7 @@ export default function JiraPanel() {
           {selectedProject && (
             <div>
               <h3 className="mb-2 text-sm font-medium text-gray-500">
-                Issues in {selectedProject} ({issueTotal} total)
+                Issues in {selectedProject} ({issues.length} shown)
               </h3>
               {loading ? (
                 <p className="text-gray-500">Loading issues…</p>

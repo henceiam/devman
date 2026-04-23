@@ -55,7 +55,7 @@ export const api = {
     getProjects: () =>
       fetchJson<{ projects: JiraProject[] }>("/jira/projects"),
     getIssues: (project: string, maxResults = 50) =>
-      fetchJson<{ total: number; issues: JiraIssue[] }>(
+      fetchJson<{ issues: JiraIssue[] }>(
         `/jira/issues?project=${encodeURIComponent(project)}&maxResults=${maxResults}`,
       ),
   },

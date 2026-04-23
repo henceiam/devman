@@ -36,13 +36,12 @@ export async function getProjects() {
 
 export async function getIssues(projectKey: string, maxResults = 50) {
   const jira = getClient();
-  const result = await jira.issueSearch.searchForIssuesUsingJql({
+  const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
     jql: `project = "${projectKey}" ORDER BY updated DESC`,
     maxResults,
     fields: ["summary", "status", "assignee", "priority", "issuetype", "updated"],
   });
   return {
-    total: result.total ?? 0,
     issues: (result.issues ?? []).map((issue) => ({
       key: issue.key,
       summary: issue.fields.summary,
