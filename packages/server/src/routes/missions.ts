@@ -29,3 +29,16 @@ missionsRouter.get("/:key", async (req: Request<{ key: string }>, res: Response)
     res.status(500).json({ error: message });
   }
 });
+
+missionsRouter.patch("/stories/:storyKey", async (req: Request<{ storyKey: string }>, res: Response) => {
+  try {
+    const { storyKey } = req.params;
+    const { milestone, category } = req.body as { milestone?: string | null; category?: string | null };
+    await missionService.updateStory(storyKey, { milestone, category });
+    res.json({ ok: true });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Missions PATCH /stories/${req.params.storyKey} error:`, message);
+    res.status(500).json({ error: message });
+  }
+});

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { api, type MissionSummary, type MissionStory, type MissionDetail } from "../api/client";
 import MilestoneGroup from "./MilestoneGroup";
+import StoryMapGrid from "./StoryMapGrid";
 
 const STATUS_COLORS: Record<string, string> = {
   "Request": "bg-white text-gray-600 border border-gray-200",
@@ -57,6 +58,7 @@ export default function MissionPage() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
 
   useEffect(() => {
     api.missions
@@ -231,12 +233,37 @@ export default function MissionPage() {
             </div>
           </div>
 
-          {/* Milestone groups */}
-          <div className="space-y-3">
-            {milestoneGroups.map(([name, groupStories]) => (
-              <MilestoneGroup key={name} name={name} stories={groupStories} />
-            ))}
-          </div>
+          {/* View toggle + content */}
+          {detail.epic.columns.length > 0 && (
+            <div className="flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                  viewMode === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                List
+              </button>
+              <button
+                onClick={() => setViewMode("map")}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                  viewMode === "map" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Story Map
+              </button>
+            </div>
+          )}
+
+          {viewMode === "list" ? (
+            <div className="space-y-3">
+              {milestoneGroups.map(([name, groupStories]) => (
+                <MilestoneGroup key={name} name={name} stories={groupStories} />
+              ))}
+            </div>
+          ) : (
+            <StoryMapGrid detail={detail} onStoryUpdated={() => loadDetail(missionKey!)} />
+          )}
         </div>
       )}
     </div>

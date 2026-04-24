@@ -56,6 +56,7 @@ export interface MissionSummary {
   shortName: string;
   status: string;
   statusCategory: string;
+  columns: { name: string; order: number }[];
 }
 
 export interface MissionStory {
@@ -64,8 +65,10 @@ export interface MissionStory {
   status: string;
   statusCategory: string;
   assignee: string;
+  avatarUrl: string | null;
   size: string | null;
   milestone: string | null;
+  category: string | null;
   copyStatus: string | null;
   type: string;
 }
@@ -97,5 +100,17 @@ export const api = {
       fetchJson<{ missions: MissionSummary[] }>("/missions"),
     getDetail: (key: string) =>
       fetchJson<MissionDetail>(`/missions/${encodeURIComponent(key)}`),
+    updateStory: async (storyKey: string, update: { milestone?: string | null; category?: string | null }) => {
+      const res = await fetch(`${API_BASE}/missions/stories/${encodeURIComponent(storyKey)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(update),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `API error: ${res.status}`);
+      }
+      return res.json();
+    },
   },
 };
