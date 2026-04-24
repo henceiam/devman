@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { api, type MissionSummary, type MissionStory, type MissionDetail } from "../api/client";
+import MilestoneGroup from "./MilestoneGroup";
 
 const STATUS_COLORS: Record<string, string> = {
   "Request": "bg-white text-gray-600 border border-gray-200",
@@ -88,8 +89,10 @@ export default function MissionPage() {
     navigate(key ? `/missions/${key}` : "/missions", { replace: true });
   };
 
-  // Compute breakdowns
-  const stories = detail?.stories ?? [];
+  // Filter out Rejected stories for all computations
+  const allStories = detail?.stories ?? [];
+  const stories = allStories.filter((s) => s.status !== "Rejected");
+
   const statusBreakdown = stories.reduce<Record<string, number>>((acc, s) => {
     const cat = categoryLabel(s.statusCategory);
     acc[cat] = (acc[cat] ?? 0) + 1;
@@ -103,6 +106,30 @@ export default function MissionPage() {
   const sortedSizes = Object.entries(sizeBreakdown).sort(
     ([a], [b]) => sizeOrder(a) - sizeOrder(b),
   );
+
+  // Group stories by milestone, sorted: No milestone → Milestone 1-10 → Out of scope
+  const milestoneGroups = useMemo(() => {
+    const groups = new Map<string, MissionStory[]>();
+    for (const story of stories) {
+      const key = story.milestone ?? "No milestone";
+      const list = groups.get(key);
+      if (list) {
+        list.push(story);
+      } else {
+        groups.set(key, [story]);
+      }
+    }
+
+    const milestoneOrder = (name: string): number => {
+      if (name === "No milestone") return -1;
+      if (name === "Out of scope") return 100;
+      const match = name.match(/^Milestone\s+(\d+)$/i);
+      return match ? parseInt(match[1], 10) : 50;
+    };
+
+    return Array.from(groups.entries())
+      .sort(([a], [b]) => milestoneOrder(a) - milestoneOrder(b));
+  }, [stories]);
 
   return (
     <div className="mx-auto max-w-5xl p-6">
@@ -120,7 +147,7 @@ export default function MissionPage() {
           <option value="">Select a mission…</option>
           {missions.map((m) => (
             <option key={m.key} value={m.key}>
-              {m.shortName ? `${m.shortName} — ` : ""}{m.summary} ({m.key})
+              {m.shortName || m.summary}
             </option>
           ))}
         </select>
@@ -204,36 +231,11 @@ export default function MissionPage() {
             </div>
           </div>
 
-          {/* Story list */}
-          <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-100 px-6 py-3">
-              <h3 className="text-sm font-medium text-gray-700">Stories</h3>
-            </div>
-            <ul className="divide-y divide-gray-100">
-              {stories.map((story) => (
-                <li key={story.key} className="flex items-center gap-3 px-6 py-3 text-sm">
-                  <span className="w-28 shrink-0 font-mono text-xs text-gray-400">{story.key}</span>
-                  {statusBadge(story.status)}
-                  <span className="min-w-0 flex-1 truncate">{story.summary}</span>
-                  {story.size && (
-                    <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
-                      {story.size}
-                    </span>
-                  )}
-                  {story.milestone && (
-                    <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-600">
-                      {story.milestone}
-                    </span>
-                  )}
-                  {story.copyStatus && (
-                    <span className={`rounded px-1.5 py-0.5 text-xs ${COPY_STATUS_COLORS[story.copyStatus] ?? "bg-gray-100 text-gray-600"}`}>
-                      {story.copyStatus}
-                    </span>
-                  )}
-                  <span className="w-28 shrink-0 text-right text-xs text-gray-400">{story.assignee}</span>
-                </li>
-              ))}
-            </ul>
+          {/* Milestone groups */}
+          <div className="space-y-3">
+            {milestoneGroups.map(([name, groupStories]) => (
+              <MilestoneGroup key={name} name={name} stories={groupStories} />
+            ))}
           </div>
         </div>
       )}

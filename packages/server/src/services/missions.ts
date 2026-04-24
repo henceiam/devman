@@ -53,7 +53,7 @@ const MISSION_PROJECT = "EBBACKLOG";
 export async function getMissions(): Promise<MissionSummary[]> {
   const jira = getClient();
   const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
-    jql: `project = "${MISSION_PROJECT}" AND issuetype = Epic AND labels = "mission" ORDER BY rank ASC`,
+    jql: `project = "${MISSION_PROJECT}" AND issuetype = Epic AND labels = "mission" AND status NOT IN ("Closed", "Rejected") ORDER BY rank ASC`,
     maxResults: 100,
     fields: ["summary", "status", "customfield_10002"],
   });
