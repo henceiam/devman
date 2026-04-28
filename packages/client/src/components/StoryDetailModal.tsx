@@ -98,6 +98,13 @@ function renderAdfNode(node: AdfNode): React.ReactNode {
       return <hr className="my-3 border-gray-200" />;
     case "hardBreak":
       return <br />;
+    case "inlineCard": {
+      const url = String(node.attrs?.url ?? "#");
+      // Extract issue key from URL for a compact label (e.g. "EBBACKLOG-123")
+      const match = url.match(/\/browse\/([A-Z]+-\d+)/);
+      const label = match ? match[1] : url;
+      return <a href={url} className="text-blue-600 underline" target="_blank" rel="noreferrer">{label}</a>;
+    }
     case "mediaSingle":
     case "media":
       return null;
