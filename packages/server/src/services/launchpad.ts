@@ -64,7 +64,7 @@ export async function getLaunchpadEscalated(): Promise<EscalatedTicket[]> {
   const jira = getClient();
 
   const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
-    jql: `project = "EBBACKLOG" AND labels = "issue-escalated-succesfully" AND "Product teams[Checkboxes]" in (Radicals) AND statusCategory != Done ORDER BY priority ASC, updated DESC`,
+    jql: `project = "EBBACKLOG" AND labels = "issue-escalated-succesfully" AND "Product teams[Checkboxes]" in (Radicals) AND statusCategory != Done AND issuetype = "Support" ORDER BY priority ASC, updated DESC`,
     maxResults: 100,
     fields: [
       "summary", "status", "priority", "assignee",
