@@ -75,7 +75,21 @@ function renderAdfNode(node: AdfNode): React.ReactNode {
     case "orderedList":
       return <ol className="mb-2 list-decimal pl-5">{renderedChildren}</ol>;
     case "listItem":
-      return <li>{renderedChildren}</li>;
+      return (
+        <li>
+          {(node.content ?? []).map((child, i) =>
+            child.type === "paragraph" ? (
+              <span key={i}>
+                {(child.content ?? []).map((c, j) => (
+                  <span key={j}>{renderAdfNode(c)}</span>
+                ))}
+              </span>
+            ) : (
+              <span key={i}>{renderAdfNode(child)}</span>
+            )
+          )}
+        </li>
+      );
     case "codeBlock":
       return <pre className="mb-2 overflow-x-auto rounded bg-gray-100 p-3 text-xs">{renderedChildren}</pre>;
     case "blockquote":
