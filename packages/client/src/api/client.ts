@@ -59,6 +59,41 @@ export interface MissionSummary {
   columns: { name: string; order: number }[];
 }
 
+export type PrState = "open" | "merged" | "declined" | "draft" | "unknown" | "branch";
+
+export interface PrReviewer {
+  login: string;
+  avatarUrl: string | null;
+  state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "PENDING";
+}
+
+export interface PrDetail {
+  number: number;
+  title: string;
+  url: string;
+  state: PrState;
+  draft: boolean;
+  author: { login: string; avatarUrl: string | null };
+  sourceBranch: string;
+  targetBranch: string;
+  openedAt: string;
+  updatedAt: string;
+  mergedAt: string | null;
+  closedAt: string | null;
+  reviewers: PrReviewer[];
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  labels: string[];
+  commentCount: number;
+  repositoryName: string;
+}
+
+export interface StoryGitHubResponse {
+  prs: PrDetail[];
+  hasBranch: boolean;
+}
+
 export interface MissionStory {
   key: string;
   summary: string;
@@ -71,11 +106,70 @@ export interface MissionStory {
   category: string | null;
   copyStatus: string | null;
   type: string;
+  subtaskProgress: { total: number; done: number; inProgress: number } | null;
+  prState: PrState | null;
 }
 
 export interface MissionDetail {
   epic: MissionSummary;
   stories: MissionStory[];
+}
+
+export interface SubtaskItem {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  assignee: string;
+  avatarUrl: string | null;
+  prState: PrState | null;
+}
+
+export interface StoryDetailResponse {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  description: unknown | null;
+  acceptanceCriteria: unknown | null;
+  subtasks: SubtaskItem[];
+  prState: PrState | null;
+}
+
+export interface LinkedSupportTicket {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  priority: string;
+}
+
+export interface EscalatedTicket {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  priority: string;
+  priorityIconUrl: string | null;
+  assignee: string;
+  avatarUrl: string | null;
+  created: string;
+  updated: string;
+  prState: PrState | null;
+  supportTicket: LinkedSupportTicket | null;
+}
+
+export interface InProgressItem {
+  key: string;
+  summary: string;
+  type: string;
+  status: string;
+  statusCategory: string;
+  assignee: string;
+  avatarUrl: string | null;
+  milestone: string | null;
+  size: string | null;
+  prState: PrState | null;
 }
 
 export const api = {
@@ -112,5 +206,15 @@ export const api = {
       }
       return res.json();
     },
+    getStoryDetail: (storyKey: string) =>
+      fetchJson<StoryDetailResponse>(`/missions/stories/${encodeURIComponent(storyKey)}`),
+    getStoryGithub: (storyKey: string) =>
+      fetchJson<StoryGitHubResponse>(`/missions/stories/${encodeURIComponent(storyKey)}/github`),
+  },
+  launchpad: {
+    getEscalated: () =>
+      fetchJson<{ tickets: EscalatedTicket[] }>("/launchpad/escalated"),
+    getInProgress: () =>
+      fetchJson<{ items: InProgressItem[] }>("/launchpad/in-progress"),
   },
 };

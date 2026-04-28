@@ -3,27 +3,8 @@ import { useParams, useNavigate } from "react-router";
 import { api, type MissionSummary, type MissionStory, type MissionDetail } from "../api/client";
 import MilestoneGroup from "./MilestoneGroup";
 import StoryMapGrid from "./StoryMapGrid";
-
-const STATUS_COLORS: Record<string, string> = {
-  "Request": "bg-white text-gray-600 border border-gray-200",
-  "To do": "bg-white text-gray-600 border border-gray-200",
-  "To Refine": "bg-blue-100 text-blue-700",
-  "In Design": "bg-purple-100 text-purple-700",
-  "Ready for Design": "bg-purple-100 text-purple-700",
-  "READY FOR DEVELOPMENT": "bg-blue-200 text-blue-800",
-  "To Investigate": "bg-blue-200 text-blue-800",
-  "In Progress": "bg-orange-100 text-orange-700",
-  "Under investigation": "bg-orange-100 text-orange-700",
-  "On Hold": "bg-orange-100 text-orange-700",
-  "Code review": "bg-yellow-100 text-yellow-700",
-  "Ready for test": "bg-yellow-100 text-yellow-700",
-  "In Test": "bg-yellow-100 text-yellow-700",
-  "Waiting for support": "bg-yellow-100 text-yellow-700",
-  "Waiting for customer": "bg-yellow-100 text-yellow-700",
-  "Ready for Deploy": "bg-lime-100 text-lime-700",
-  "Closed": "bg-green-100 text-green-700",
-  "Rejected": "bg-gray-200 text-gray-500",
-};
+import StoryDetailModal from "./StoryDetailModal";
+import { statusBadge } from "./statusUtils";
 
 const COPY_STATUS_COLORS: Record<string, string> = {
   "Copy - ready to start": "bg-sky-100 text-sky-700",
@@ -32,11 +13,6 @@ const COPY_STATUS_COLORS: Record<string, string> = {
   "Translation - in progress": "bg-yellow-100 text-yellow-700",
   "Translation - done": "bg-green-100 text-green-700",
 };
-
-function statusBadge(status: string) {
-  const cls = STATUS_COLORS[status] ?? "bg-red-100 text-red-700";
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{status}</span>;
-}
 
 function categoryLabel(key: string) {
   if (key === "done") return "Done";
@@ -59,6 +35,8 @@ export default function MissionPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
+  const [hideDone, setHideDone] = useState(false);
+  const [selectedStoryKey, setSelectedStoryKey] = useState<string | null>(null);
 
   useEffect(() => {
     api.missions
@@ -86,14 +64,32 @@ export default function MissionPage() {
     }
   }, [missionKey, loadDetail]);
 
+  // Keyboard shortcuts: R = refresh, D = toggle done visibility
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === "r" || e.key === "R") {
+        if (!selectedStoryKey && missionKey) loadDetail(missionKey);
+      } else if (e.key === "d" || e.key === "D") {
+        setHideDone((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [missionKey, loadDetail, selectedStoryKey]);
+
   const handleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const key = e.target.value;
     navigate(key ? `/missions/${key}` : "/missions", { replace: true });
   };
 
-  // Filter out Rejected stories for all computations
+  // All non-rejected stories (for statistics)
   const allStories = detail?.stories ?? [];
   const stories = allStories.filter((s) => s.status !== "Rejected");
+  // Visible stories (optionally hides done — for cards/grid only)
+  const visibleStories = hideDone
+    ? stories.filter((s) => s.statusCategory !== "done")
+    : stories;
 
   const statusBreakdown = stories.reduce<Record<string, number>>((acc, s) => {
     const cat = categoryLabel(s.statusCategory);
@@ -112,7 +108,7 @@ export default function MissionPage() {
   // Group stories by milestone, sorted: No milestone → Milestone 1-10 → Out of scope
   const milestoneGroups = useMemo(() => {
     const groups = new Map<string, MissionStory[]>();
-    for (const story of stories) {
+    for (const story of visibleStories) {
       const key = story.milestone ?? "No milestone";
       const list = groups.get(key);
       if (list) {
@@ -131,10 +127,10 @@ export default function MissionPage() {
 
     return Array.from(groups.entries())
       .sort(([a], [b]) => milestoneOrder(a) - milestoneOrder(b));
-  }, [stories]);
+  }, [visibleStories]);
 
   return (
-    <div className="mx-auto max-w-5xl p-6">
+    <div className="mx-auto w-full px-6 py-6">
       <div className="mb-6 flex items-center gap-4">
         <label htmlFor="mission-select" className="text-sm font-medium text-gray-700">
           Mission
@@ -234,37 +230,59 @@ export default function MissionPage() {
           </div>
 
           {/* View toggle + content */}
-          {detail.epic.columns.length > 0 && (
-            <div className="flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
-              <button
-                onClick={() => setViewMode("list")}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                  viewMode === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                List
-              </button>
-              <button
-                onClick={() => setViewMode("map")}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                  viewMode === "map" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Story Map
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            {detail.epic.columns.length > 0 && (
+              <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+                <button
+                  onClick={() => setViewMode("list")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    viewMode === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  List
+                </button>
+                <button
+                  onClick={() => setViewMode("map")}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                    viewMode === "map" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  Story Map
+                </button>
+              </div>
+            )}
+
+            <span className="ml-auto flex items-center gap-3 text-[11px] text-gray-400">
+              {hideDone && (
+                <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-yellow-700">Done hidden</span>
+              )}
+              <kbd className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5">R</kbd> refresh
+              <kbd className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5">D</kbd> toggle done
+            </span>
+          </div>
 
           {viewMode === "list" ? (
             <div className="space-y-3">
               {milestoneGroups.map(([name, groupStories]) => (
-                <MilestoneGroup key={name} name={name} stories={groupStories} />
+                <MilestoneGroup key={name} name={name} stories={groupStories} onStorySelect={setSelectedStoryKey} />
               ))}
             </div>
           ) : (
-            <StoryMapGrid detail={detail} onStoryUpdated={() => loadDetail(missionKey!)} />
+            <StoryMapGrid
+              detail={{ ...detail, stories: visibleStories }}
+              onStoryUpdated={() => loadDetail(missionKey!)}
+              onStorySelect={setSelectedStoryKey}
+            />
           )}
         </div>
+      )}
+
+      {selectedStoryKey && (
+        <StoryDetailModal
+          storyKey={selectedStoryKey}
+          hideDone={hideDone}
+          onClose={() => setSelectedStoryKey(null)}
+        />
       )}
     </div>
   );

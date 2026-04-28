@@ -30,6 +30,30 @@ missionsRouter.get("/:key", async (req: Request<{ key: string }>, res: Response)
   }
 });
 
+missionsRouter.get("/stories/:storyKey/github", async (req: Request<{ storyKey: string }>, res: Response) => {
+  try {
+    const { storyKey } = req.params;
+    const data = await missionService.getStoryGithub(storyKey);
+    res.json(data);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Missions GET /stories/${req.params.storyKey}/github error:`, message);
+    res.status(500).json({ error: message });
+  }
+});
+
+missionsRouter.get("/stories/:storyKey", async (req: Request<{ storyKey: string }>, res: Response) => {
+  try {
+    const { storyKey } = req.params;
+    const detail = await missionService.getStoryDetail(storyKey);
+    res.json(detail);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Missions GET /stories/${req.params.storyKey} error:`, message);
+    res.status(500).json({ error: message });
+  }
+});
+
 missionsRouter.patch("/stories/:storyKey", async (req: Request<{ storyKey: string }>, res: Response) => {
   try {
     const { storyKey } = req.params;

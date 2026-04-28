@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Background -->
+  <circle cx="16" cy="16" r="15" fill="#14281f"/>
+  <!-- Sonar rings -->
+  <circle cx="16" cy="16" r="12" fill="none" stroke="#4ade80" stroke-width="0.4" opacity="0.2"/>
+  <circle cx="16" cy="16" r="9" fill="none" stroke="#4ade80" stroke-width="0.4" opacity="0.3"/>
+  <circle cx="16" cy="16" r="6" fill="none" stroke="#4ade80" stroke-width="0.4" opacity="0.4"/>
+  <circle cx="16" cy="16" r="3" fill="none" stroke="#4ade80" stroke-width="0.5" opacity="0.5"/>
+  <!-- Crosshair lines -->
+  <line x1="16" y1="2" x2="16" y2="30" stroke="#4ade80" stroke-width="0.3" opacity="0.15"/>
+  <line x1="2" y1="16" x2="30" y2="16" stroke="#4ade80" stroke-width="0.3" opacity="0.15"/>
+  <!-- Sweep gradient -->
+  <defs>
+    <linearGradient id="sweep" x1="0.5" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4ade80" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#4ade80" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <path d="M16,16 L16,3 A13,13 0 0,1 27.2,9.5 Z" fill="url(#sweep)"/>
+  <!-- Sweep line -->
+  <line x1="16" y1="16" x2="16" y2="3" stroke="#4ade80" stroke-width="0.8" opacity="0.7" stroke-linecap="round"/>
+  <!-- Blips -->
+  <circle cx="20" cy="9" r="1.3" fill="#4ade80" opacity="0.9"/>
+  <circle cx="20" cy="9" r="2.5" fill="none" stroke="#4ade80" stroke-width="0.4" opacity="0.4"/>
+  <circle cx="10" cy="13" r="1" fill="#4ade80" opacity="0.7"/>
+  <circle cx="10" cy="13" r="2" fill="none" stroke="#4ade80" stroke-width="0.3" opacity="0.3"/>
+  <circle cx="22" cy="19" r="0.9" fill="#4ade80" opacity="0.5"/>
+  <circle cx="13" cy="22" r="1.1" fill="#4ade80" opacity="0.6"/>
+  <circle cx="13" cy="22" r="2.2" fill="none" stroke="#4ade80" stroke-width="0.3" opacity="0.25"/>
+  <!-- Center dot -->
+  <circle cx="16" cy="16" r="1.2" fill="#4ade80" opacity="0.9"/>
+</svg>

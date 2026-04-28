@@ -7,6 +7,11 @@ export default defineConfig(({ mode }) => {
   const rootEnv = loadEnv(mode, path.resolve(__dirname, "../.."), "");
   return {
     plugins: [react(), tailwindcss()],
+    test: {
+      environment: "jsdom",
+      globals: true,
+      setupFiles: ["./src/test/setup.ts"],
+    },
     server: {
       port: parseInt(rootEnv.CLIENT_PORT || "5173", 10),
       proxy: {

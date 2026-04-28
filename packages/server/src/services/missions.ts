@@ -1,5 +1,6 @@
 import { Version3Client } from "jira.js";
 import { config } from "../config.js";
+import { getPrWithReviews } from "./github.js";
 
 let client: Version3Client | null = null;
 
@@ -37,6 +38,8 @@ export interface StoryMapColumn {
   order: number;
 }
 
+export type PrState = "open" | "merged" | "declined" | "draft" | "unknown" | "branch";
+
 export interface MissionStory {
   key: string;
   summary: string;
@@ -49,11 +52,67 @@ export interface MissionStory {
   category: string | null;
   copyStatus: string | null;
   type: string;
+  subtaskProgress: { total: number; done: number; inProgress: number } | null;
+  prState: PrState | null;
 }
 
 export interface MissionDetail {
   epic: MissionSummary;
   stories: MissionStory[];
+}
+
+export interface SubtaskItem {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  assignee: string;
+  avatarUrl: string | null;
+  prState: PrState | null;
+}
+
+export interface StoryDetailResponse {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  description: unknown | null;
+  acceptanceCriteria: unknown | null;
+  subtasks: SubtaskItem[];
+  prState: PrState | null;
+}
+
+export interface PrReviewer {
+  login: string;
+  avatarUrl: string | null;
+  state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "PENDING";
+}
+
+export interface PrDetail {
+  number: number;
+  title: string;
+  url: string;
+  state: PrState;
+  draft: boolean;
+  author: { login: string; avatarUrl: string | null };
+  sourceBranch: string;
+  targetBranch: string;
+  openedAt: string;
+  updatedAt: string;
+  mergedAt: string | null;
+  closedAt: string | null;
+  reviewers: PrReviewer[];
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  labels: string[];
+  commentCount: number;
+  repositoryName: string;
+}
+
+export interface StoryGitHubResponse {
+  prs: PrDetail[];
+  hasBranch: boolean;
 }
 
 const MISSION_PROJECT = "EBBACKLOG";
@@ -121,8 +180,9 @@ async function fetchStories(jqlParentClause: string): Promise<MissionStory[]> {
     jql: `${jqlParentClause} ORDER BY rank ASC`,
     maxResults: 200,
     fields: [
-      "summary", "status", "assignee", "issuetype",
+      "summary", "status", "assignee", "issuetype", "subtasks",
       "customfield_11357", "customfield_11477", "customfield_11302", "customfield_11487",
+      "customfield_10000",
     ],
   });
 
@@ -132,6 +192,21 @@ async function fetchStories(jqlParentClause: string): Promise<MissionStory[]> {
       displayName?: string;
       avatarUrls?: Record<string, string>;
     } | null;
+
+    // Compute subtask progress
+    const subtasks = (fields.subtasks ?? issue.fields.subtasks) as
+      Array<{ fields: { status: { statusCategory: { key: string } } } }> | undefined;
+    let subtaskProgress: MissionStory["subtaskProgress"] = null;
+    if (subtasks && subtasks.length > 0) {
+      let done = 0, inProgress = 0;
+      for (const st of subtasks) {
+        const cat = st.fields?.status?.statusCategory?.key;
+        if (cat === "done") done++;
+        else if (cat === "indeterminate") inProgress++;
+      }
+      subtaskProgress = { total: subtasks.length, done, inProgress };
+    }
+
     return {
       key: issue.key!,
       summary: issue.fields.summary,
@@ -144,6 +219,8 @@ async function fetchStories(jqlParentClause: string): Promise<MissionStory[]> {
       category: (fields.customfield_11487 as string | null) ?? null,
       copyStatus: (fields.customfield_11302 as { value: string } | null)?.value ?? null,
       type: issue.fields.issuetype?.name ?? "Story",
+      subtaskProgress,
+      prState: parsePrField(fields.customfield_10000 as string | null),
     };
   });
 }
@@ -164,6 +241,48 @@ function parseColumns(raw: string | null): StoryMapColumn[] {
   } catch {
     return [];
   }
+}
+
+/** Parse Jira's customfield_10000 (dev info) to extract PR state or branch presence */
+export function parsePrField(raw: string | null | undefined): PrState | null {
+  if (!raw || typeof raw !== "string") return null;
+
+  // Check for PRs first via stateCount in the embedded JSON
+  const prStateMatch = raw.match(/"pullrequest"\s*:\s*\{[^}]*"stateCount"\s*:\s*(\d+)[^}]*"state"\s*:\s*"(\w+)"/);
+  if (prStateMatch && parseInt(prStateMatch[1], 10) > 0) {
+    const normalized = prStateMatch[2].toUpperCase();
+    const map: Record<string, PrState> = {
+      OPEN: "open",
+      MERGED: "merged",
+      DECLINED: "declined",
+      DRAFT: "draft",
+    };
+    return map[normalized] ?? "unknown";
+  }
+
+  // Fallback: check top-level stateCount for PRs (older format)
+  const topLevelPr = raw.match(/pullrequest=\{[^}]*stateCount=(\d+)/);
+  if (topLevelPr && parseInt(topLevelPr[1], 10) > 0) {
+    const stateMatch = raw.match(/"state"\s*:\s*"(\w+)"/);
+    if (stateMatch) {
+      const normalized = stateMatch[1].toUpperCase();
+      const map: Record<string, PrState> = {
+        OPEN: "open",
+        MERGED: "merged",
+        DECLINED: "declined",
+        DRAFT: "draft",
+      };
+      return map[normalized] ?? "unknown";
+    }
+  }
+
+  // Check for branches (no PR, but branch exists)
+  const branchCountMatch = raw.match(/branch=\{[^}]*count=(\d+)/);
+  if (branchCountMatch && parseInt(branchCountMatch[1], 10) > 0) {
+    return "branch";
+  }
+
+  return null;
 }
 
 /** Update a story's milestone and/or category in Jira */
@@ -189,4 +308,244 @@ export async function updateStory(
     fields,
     notifyUsers: false,
   });
+}
+
+/** Fetch detailed info for a single story (description, acceptance criteria, subtasks) */
+export async function getStoryDetail(issueKey: string): Promise<StoryDetailResponse> {
+  const jira = getClient();
+  const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+    jql: `key = "${issueKey}"`,
+    maxResults: 1,
+    fields: ["summary", "status", "description", "subtasks", "customfield_11101", "customfield_10000"],
+  });
+
+  const issue = result.issues?.[0];
+  if (!issue) throw new Error(`Story not found: ${issueKey}`);
+
+  const fields = issue.fields as Record<string, unknown>;
+
+  const subtasksRaw = (fields.subtasks ?? issue.fields.subtasks) as
+    Array<{ key: string }> | undefined;
+  const subtaskKeys = (subtasksRaw ?? []).map((st) => st.key);
+
+  let subtasks: SubtaskItem[] = [];
+  if (subtaskKeys.length > 0) {
+    const keysJql = subtaskKeys.map((k) => `"${k}"`).join(", ");
+    const subtaskResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+      jql: `key IN (${keysJql}) ORDER BY rank ASC`,
+      maxResults: subtaskKeys.length,
+      fields: ["summary", "status", "assignee", "customfield_10000"],
+    });
+    subtasks = (subtaskResult.issues ?? []).map((st) => {
+      const assignee = st.fields.assignee as {
+        displayName?: string;
+        avatarUrls?: Record<string, string>;
+      } | null;
+      const stFields = st.fields as Record<string, unknown>;
+      return {
+        key: st.key!,
+        summary: st.fields.summary,
+        status: st.fields.status?.name ?? "Unknown",
+        statusCategory: st.fields.status?.statusCategory?.key ?? "new",
+        assignee: assignee?.displayName ?? "Unassigned",
+        avatarUrl: assignee?.avatarUrls?.["32x32"] ?? null,
+        prState: parsePrField(stFields.customfield_10000 as string | null),
+      };
+    });
+  }
+
+  return {
+    key: issue.key!,
+    summary: issue.fields.summary,
+    status: issue.fields.status?.name ?? "Unknown",
+    statusCategory: issue.fields.status?.statusCategory?.key ?? "new",
+    description: issue.fields.description ?? null,
+    acceptanceCriteria: (fields.customfield_11101 as unknown) ?? null,
+    subtasks,
+    prState: parsePrField(fields.customfield_10000 as string | null),
+  };
+}
+
+/** Parse a GitHub PR URL into owner, repo, and PR number */
+function parseGitHubPrUrl(url: string): { owner: string; repo: string; number: number } | null {
+  const match = url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+  if (!match) return null;
+  return { owner: match[1], repo: match[2], number: parseInt(match[3], 10) };
+}
+
+/** Fetch GitHub PR details for a Jira issue using Jira dev-status API + GitHub API */
+export async function getStoryGithub(issueKey: string): Promise<StoryGitHubResponse> {
+  // Get numeric issue ID and customfield_10000 for hasBranch
+  const jira = getClient();
+  const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+    jql: `key = "${issueKey}"`,
+    maxResults: 1,
+    fields: ["customfield_10000"],
+  });
+  const issue = result.issues?.[0];
+  if (!issue) throw new Error(`Story not found: ${issueKey}`);
+
+  const issueId = issue.id!;
+  const prFieldRaw = (issue.fields as Record<string, unknown>).customfield_10000 as string | null;
+  // hasBranch is true only when there's a branch but no PR
+  const hasBranch = parsePrField(prFieldRaw) === "branch";
+
+  // Fetch dev-status PR data from Jira
+  const auth = Buffer.from(`${config.jira.email}:${config.jira.apiToken}`).toString("base64");
+  const devStatusUrl =
+    `https://${config.jira.host.replace(/^https?:\/\//, "")}/rest/dev-status/latest/issue/detail` +
+    `?issueId=${issueId}&applicationType=GitHub&dataType=pullrequest`;
+  const devRes = await fetch(devStatusUrl, {
+    headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
+  });
+  if (!devRes.ok) {
+    return { prs: [], hasBranch };
+  }
+
+  const devData = (await devRes.json()) as {
+    detail?: Array<{
+      pullRequests?: Array<{
+        id: string;
+        name: string;
+        url: string;
+        status: string;
+        lastUpdate: string;
+        commentCount: number;
+        repositoryName: string;
+        source?: { branch: string };
+        destination?: { branch: string };
+        author?: { name: string; avatar: string };
+        reviewers?: Array<{ name: string; avatar: string; approved: boolean }>;
+      }>;
+    }>;
+  };
+
+  const rawPrs = devData.detail?.flatMap((d) => d.pullRequests ?? []) ?? [];
+  if (rawPrs.length === 0) {
+    return { prs: [], hasBranch };
+  }
+
+  // Cap at 10 PRs to avoid rate limit issues
+  const topPrs = rawPrs.slice(0, 10);
+
+  // Fan out GitHub API calls in parallel
+  const prDetails = await Promise.all(
+    topPrs.map(async (rawPr): Promise<PrDetail | null> => {
+      const parsed = parseGitHubPrUrl(rawPr.url);
+      if (!parsed) return null;
+
+      try {
+        const { pr, reviews, requestedReviewers } = await getPrWithReviews(
+          parsed.owner,
+          parsed.repo,
+          parsed.number,
+        );
+
+        // Deduplicate reviews: keep the latest state per reviewer
+        const latestReviewByUser = new Map<number, (typeof reviews)[number]>();
+        for (const review of reviews) {
+          if (!review.user) continue;
+          const existing = latestReviewByUser.get(review.user.id);
+          if (!existing || new Date(review.submitted_at ?? 0) > new Date(existing.submitted_at ?? 0)) {
+            latestReviewByUser.set(review.user.id, review);
+          }
+        }
+
+        const reviewers: PrReviewer[] = [
+          // Submitted reviews
+          ...Array.from(latestReviewByUser.values()).map((r) => ({
+            login: r.user?.login ?? "unknown",
+            avatarUrl: r.user?.avatar_url ?? null,
+            state: (r.state as PrReviewer["state"]) ?? "COMMENTED",
+          })),
+          // Pending requested reviewers (not yet reviewed)
+          ...requestedReviewers
+            .filter((u: { id: number; login: string; avatar_url: string }) => !latestReviewByUser.has(u.id))
+            .map((u: { id: number; login: string; avatar_url: string }) => ({
+              login: u.login,
+              avatarUrl: u.avatar_url ?? null,
+              state: "PENDING" as const,
+            })),
+        ];
+
+        const jiraStatus = rawPr.status.toUpperCase();
+        const stateMap: Record<string, PrState> = {
+          OPEN: "open",
+          MERGED: "merged",
+          DECLINED: "declined",
+          DRAFT: "draft",
+        };
+        const state: PrState = pr.draft ? "draft" : (stateMap[jiraStatus] ?? "unknown");
+
+        return {
+          number: parsed.number,
+          title: pr.title,
+          url: rawPr.url,
+          state,
+          draft: pr.draft ?? false,
+          author: {
+            login: pr.user?.login ?? "unknown",
+            avatarUrl: pr.user?.avatar_url ?? null,
+          },
+          sourceBranch: pr.head.ref,
+          targetBranch: pr.base.ref,
+          openedAt: pr.created_at,
+          updatedAt: pr.updated_at,
+          mergedAt: pr.merged_at ?? null,
+          closedAt: pr.closed_at ?? null,
+          reviewers,
+          additions: pr.additions,
+          deletions: pr.deletions,
+          changedFiles: pr.changed_files,
+          labels: pr.labels.map((l: string | { name?: string }) => (typeof l === "string" ? l : l.name ?? "")),
+          commentCount: rawPr.commentCount,
+          repositoryName: rawPr.repositoryName,
+        };
+      } catch {
+        // GitHub API unavailable or no access — fall back to Jira dev-status data
+        const jiraStatus = rawPr.status.toUpperCase();
+        const stateMap: Record<string, PrState> = {
+          OPEN: "open",
+          MERGED: "merged",
+          DECLINED: "declined",
+          DRAFT: "draft",
+        };
+        const state: PrState = stateMap[jiraStatus] ?? "unknown";
+        const jiraReviewers: PrReviewer[] = (rawPr.reviewers ?? []).map((r) => ({
+          login: r.name,
+          avatarUrl: r.avatar ?? null,
+          state: r.approved ? "APPROVED" : "PENDING",
+        }));
+        return {
+          number: parsed.number,
+          title: rawPr.name,
+          url: rawPr.url,
+          state,
+          draft: state === "draft",
+          author: {
+            login: rawPr.author?.name ?? "unknown",
+            avatarUrl: rawPr.author?.avatar ?? null,
+          },
+          sourceBranch: rawPr.source?.branch ?? "",
+          targetBranch: rawPr.destination?.branch ?? "",
+          openedAt: rawPr.lastUpdate,
+          updatedAt: rawPr.lastUpdate,
+          mergedAt: state === "merged" ? rawPr.lastUpdate : null,
+          closedAt: state === "declined" ? rawPr.lastUpdate : null,
+          reviewers: jiraReviewers,
+          additions: 0,
+          deletions: 0,
+          changedFiles: 0,
+          labels: [],
+          commentCount: rawPr.commentCount,
+          repositoryName: rawPr.repositoryName,
+        };
+      }
+    }),
+  );
+
+  return {
+    prs: prDetails.filter((p): p is PrDetail => p !== null),
+    hasBranch,
+  };
 }

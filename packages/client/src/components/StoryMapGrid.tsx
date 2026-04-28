@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { DndContext, DragOverlay, useDroppable, type DragEndEvent, type DragStartEvent, closestCenter } from "@dnd-kit/core";
 import type { MissionStory, MissionDetail } from "../api/client";
 import { api } from "../api/client";
@@ -7,6 +7,7 @@ import StoryCard from "./StoryCard";
 interface StoryMapGridProps {
   detail: MissionDetail;
   onStoryUpdated: () => void;
+  onStorySelect?: (key: string) => void;
 }
 
 /** Encode milestone + column into a droppable ID */
@@ -41,10 +42,14 @@ function DroppableCell({ id, children }: { id: string; children: React.ReactNode
   );
 }
 
-export default function StoryMapGrid({ detail, onStoryUpdated }: StoryMapGridProps) {
-  const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
+export default function StoryMapGrid({ detail, onStoryUpdated, onStorySelect }: StoryMapGridProps) {
+  const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set(["Out of scope"]));
   const [activeStory, setActiveStory] = useState<MissionStory | null>(null);
   const [localStories, setLocalStories] = useState<MissionStory[] | null>(null);
+
+  // Clear optimistic local state when upstream stories change (e.g. hideDone toggle, refresh)
+  const detailStories = detail.stories;
+  useEffect(() => { setLocalStories(null); }, [detailStories]);
 
   const stories = localStories ?? detail.stories;
   const nonRejected = useMemo(
@@ -138,15 +143,18 @@ export default function StoryMapGrid({ detail, onStoryUpdated }: StoryMapGridPro
 
   // Count stories per milestone row for summary
   const rowCounts = useMemo(() => {
-    const counts = new Map<string, { total: number; done: number }>();
+    const counts = new Map<string, { total: number; done: number; inProgress: number; toDo: number }>();
     for (const [ms, colMap] of milestoneRows) {
-      let total = 0;
-      let done = 0;
+      let total = 0, done = 0, inProgress = 0, toDo = 0;
       for (const stories of colMap.values()) {
-        total += stories.length;
-        done += stories.filter((s) => s.statusCategory === "done").length;
+        for (const s of stories) {
+          total++;
+          if (s.statusCategory === "done") done++;
+          else if (s.statusCategory === "indeterminate") inProgress++;
+          else toDo++;
+        }
       }
-      counts.set(ms, { total, done });
+      counts.set(ms, { total, done, inProgress, toDo });
     }
     return counts;
   }, [milestoneRows]);
@@ -166,7 +174,7 @@ export default function StoryMapGrid({ detail, onStoryUpdated }: StoryMapGridPro
       onDragEnd={handleDragEnd}
     >
       <div className="overflow-x-auto">
-        <div className="inline-grid min-w-full" style={{ gridTemplateColumns: `200px repeat(${columnNames.length}, minmax(180px, 1fr))` }}>
+        <div className="inline-grid min-w-full" style={{ gridTemplateColumns: `140px repeat(${columnNames.length}, minmax(180px, 1fr))` }}>
           {/* Header row */}
           <div className="sticky left-0 z-10 bg-gray-50 border-b border-gray-200 p-2" />
           {columnNames.map((col) => (
@@ -184,29 +192,42 @@ export default function StoryMapGrid({ detail, onStoryUpdated }: StoryMapGridPro
                 {/* Row header */}
                 <button
                   onClick={() => toggleRow(ms)}
-                  className="sticky left-0 z-10 flex items-center gap-2 border-b border-gray-100 bg-white px-3 py-2 text-left hover:bg-gray-50"
+                  className={`sticky left-0 z-10 flex items-start gap-2 border-b border-gray-100 px-3 py-2 text-left ${
+                    ms === "No milestone" || ms === "Out of scope"
+                      ? "bg-orange-50 hover:bg-orange-100"
+                      : "bg-white hover:bg-gray-50"
+                  }`}
                 >
                   <svg
-                    className={`h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform ${collapsed ? "" : "rotate-90"}`}
+                    className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400 transition-transform ${collapsed ? "" : "rotate-90"}`}
                     fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
-                  <span className="text-xs font-semibold text-gray-700">{ms}</span>
-                  {counts && (
-                    <span className="text-[10px] text-gray-400">
-                      {counts.done}/{counts.total}
-                    </span>
-                  )}
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">{ms}</span>
+                    {counts && counts.total > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-gray-100">
+                          {counts.done > 0 && <div className="bg-green-500" style={{ width: `${(counts.done / counts.total) * 100}%` }} />}
+                          {counts.inProgress > 0 && <div className="bg-orange-400" style={{ width: `${(counts.inProgress / counts.total) * 100}%` }} />}
+                          {counts.toDo > 0 && <div className="bg-gray-300" style={{ width: `${(counts.toDo / counts.total) * 100}%` }} />}
+                        </div>
+                        <span className="text-[10px] text-gray-400">{counts.done}/{counts.total}</span>
+                      </div>
+                    )}
+                  </div>
                 </button>
 
                 {/* Cells */}
                 {columnNames.map((col) => (
-                  <div key={`${ms}::${col}`} className="border-b border-gray-100 p-1">
+                  <div key={`${ms}::${col}`} className={`border-b border-gray-100 p-1 ${
+                    ms === "No milestone" || ms === "Out of scope" ? "bg-orange-50" : ""
+                  }`}>
                     {!collapsed && (
                       <DroppableCell id={cellId(ms, col)}>
                         {(colMap.get(col) ?? []).map((story) => (
-                          <StoryCard key={story.key} story={story} />
+                          <StoryCard key={story.key} story={story} onSelect={onStorySelect} />
                         ))}
                       </DroppableCell>
                     )}

@@ -32,6 +32,20 @@ export async function getRepos(perPage = 30) {
   }));
 }
 
+export async function getPrWithReviews(owner: string, repo: string, prNumber: number) {
+  const octokit = getClient();
+  const [prRes, reviewsRes, requestsRes] = await Promise.all([
+    octokit.pulls.get({ owner, repo, pull_number: prNumber }),
+    octokit.pulls.listReviews({ owner, repo, pull_number: prNumber, per_page: 100 }),
+    octokit.pulls.listRequestedReviewers({ owner, repo, pull_number: prNumber }),
+  ]);
+  return {
+    pr: prRes.data,
+    reviews: reviewsRes.data,
+    requestedReviewers: requestsRes.data.users ?? [],
+  };
+}
+
 export async function getPullRequests(owner: string, repo: string, state: "open" | "closed" | "all" = "open") {
   const octokit = getClient();
   const { data } = await octokit.pulls.list({
