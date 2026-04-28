@@ -4,8 +4,10 @@ import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 
 export default defineConfig(({ mode }) => {
-  const rootEnv = loadEnv(mode, path.resolve(__dirname, "../.."), "");
+  const rootDir = path.resolve(__dirname, "../..");
+  const rootEnv = loadEnv(mode, rootDir, "");
   return {
+    envDir: rootDir,
     plugins: [react(), tailwindcss()],
     test: {
       environment: "jsdom",
