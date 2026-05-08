@@ -200,10 +200,12 @@ export default function LaunchpadPage() {
     return () => window.removeEventListener("keydown", handler);
   }, [fetchAll, selectedStoryKey]);
 
-  // Group in-progress by status in display order
+  // Group in-progress by status in display order, epics first within each group
   const grouped = IN_PROGRESS_STATUS_ORDER.map((status) => ({
     status,
-    items: inProgress.filter((i) => i.status === status),
+    items: inProgress
+      .filter((i) => i.status === status)
+      .sort((a, b) => (a.type === "Epic" ? -1 : b.type === "Epic" ? 1 : 0)),
   })).filter((g) => g.items.length > 0);
 
   // Sort escalated by priority
