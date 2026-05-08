@@ -130,11 +130,27 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
     maxResults: 200,
     fields: [
       "summary", "status", "issuetype", "assignee",
-      "customfield_11357", "customfield_11477", "customfield_10000",
+      "customfield_11357", "customfield_11477", "customfield_10000", "customfield_10014",
     ],
   });
 
-  return (result.issues ?? []).map((issue) => {
+  const issues = result.issues ?? [];
+
+  // Collect epic keys that are in the result
+  const epicKeys = new Set(
+    issues
+      .filter((i) => i.fields.issuetype?.name === "Epic")
+      .map((i) => i.key!)
+  );
+
+  return issues
+    // Filter out stories whose epic link points to an epic already in the list
+    .filter((issue) => {
+      if (issue.fields.issuetype?.name === "Epic") return true;
+      const epicLink = (issue.fields as Record<string, unknown>).customfield_10014 as string | null;
+      return !epicLink || !epicKeys.has(epicLink);
+    })
+    .map((issue) => {
     const fields = issue.fields as Record<string, unknown>;
     const assignee = issue.fields.assignee as {
       displayName?: string;
