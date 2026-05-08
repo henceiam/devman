@@ -130,7 +130,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
     maxResults: 200,
     fields: [
       "summary", "status", "issuetype", "assignee",
-      "customfield_11357", "customfield_11477", "customfield_10000", "customfield_10014",
+      "customfield_11357", "customfield_11477", "customfield_10000", "customfield_10014", "parent",
     ],
   });
 
@@ -143,12 +143,39 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
       .map((i) => i.key!)
   );
 
+  /** Extract the parent epic key from a story, handling both classic (customfield_10014)
+   *  and next-gen (parent field) project styles. */
+  function getEpicKey(issue: (typeof issues)[number]): string | null {
+    const fields = issue.fields as Record<string, unknown>;
+    // Classic: Epic Link field — may be a string key or an object with a key property
+    const epicLink = fields.customfield_10014;
+    if (epicLink) {
+      if (typeof epicLink === "string") return epicLink;
+      if (typeof epicLink === "object" && epicLink !== null && "key" in epicLink) {
+        return (epicLink as { key: string }).key;
+      }
+    }
+    // Next-gen: parent field
+    const parent = fields.parent;
+    if (parent && typeof parent === "object" && parent !== null && "key" in parent) {
+      const parentTyped = parent as { key: string; fields?: { issuetype?: { name?: string } } };
+      // Only treat as epic parent if the parent is an Epic
+      if (parentTyped.fields?.issuetype?.name === "Epic") {
+        return parentTyped.key;
+      }
+    }
+    return null;
+  }
+
   return issues
-    // Filter out stories whose epic link points to an epic already in the list
+    // Filter out stories whose epic is already shown in the list
     .filter((issue) => {
       if (issue.fields.issuetype?.name === "Epic") return true;
-      const epicLink = (issue.fields as Record<string, unknown>).customfield_10014 as string | null;
-      return !epicLink || !epicKeys.has(epicLink);
+      const epicKey = getEpicKey(issue);
+      // Temporary diagnostic log — remove once epic link field is confirmed
+      const fields = issue.fields as Record<string, unknown>;
+      console.log(`[launchpad] story ${issue.key} epicLink14=${JSON.stringify(fields.customfield_10014)} parent=${JSON.stringify(fields.parent)} → resolved epicKey=${epicKey} filtered=${!!epicKey && epicKeys.has(epicKey)}`);
+      return !epicKey || !epicKeys.has(epicKey);
     })
     .map((issue) => {
     const fields = issue.fields as Record<string, unknown>;
