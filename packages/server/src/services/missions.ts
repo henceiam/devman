@@ -76,6 +76,7 @@ export interface StoryDetailResponse {
   summary: string;
   status: string;
   statusCategory: string;
+  issuetype: string;
   description: unknown | null;
   acceptanceCriteria: unknown | null;
   subtasks: SubtaskItem[];
@@ -310,48 +311,69 @@ export async function updateStory(
   });
 }
 
-/** Fetch detailed info for a single story (description, acceptance criteria, subtasks) */
+/** Fetch detailed info for a single story or epic (description, acceptance criteria, subtasks/child stories) */
 export async function getStoryDetail(issueKey: string): Promise<StoryDetailResponse> {
   const jira = getClient();
   const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
     jql: `key = "${issueKey}"`,
     maxResults: 1,
-    fields: ["summary", "status", "description", "subtasks", "customfield_11101", "customfield_10000"],
+    fields: ["summary", "status", "issuetype", "description", "subtasks", "customfield_11101", "customfield_10000"],
   });
 
   const issue = result.issues?.[0];
   if (!issue) throw new Error(`Story not found: ${issueKey}`);
 
   const fields = issue.fields as Record<string, unknown>;
-
-  const subtasksRaw = (fields.subtasks ?? issue.fields.subtasks) as
-    Array<{ key: string }> | undefined;
-  const subtaskKeys = (subtasksRaw ?? []).map((st) => st.key);
+  const issuetype = issue.fields.issuetype?.name ?? "Story";
 
   let subtasks: SubtaskItem[] = [];
-  if (subtaskKeys.length > 0) {
-    const keysJql = subtaskKeys.map((k) => `"${k}"`).join(", ");
-    const subtaskResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
-      jql: `key IN (${keysJql}) ORDER BY rank ASC`,
-      maxResults: subtaskKeys.length,
-      fields: ["summary", "status", "assignee", "customfield_10000"],
-    });
-    subtasks = (subtaskResult.issues ?? []).map((st) => {
-      const assignee = st.fields.assignee as {
-        displayName?: string;
-        avatarUrls?: Record<string, string>;
-      } | null;
-      const stFields = st.fields as Record<string, unknown>;
-      return {
-        key: st.key!,
-        summary: st.fields.summary,
-        status: st.fields.status?.name ?? "Unknown",
-        statusCategory: st.fields.status?.statusCategory?.key ?? "new",
-        assignee: assignee?.displayName ?? "Unassigned",
-        avatarUrl: assignee?.avatarUrls?.["32x32"] ?? null,
-        prState: parsePrField(stFields.customfield_10000 as string | null),
-      };
-    });
+
+  if (issuetype === "Epic") {
+    // For epics, fetch child stories instead of subtasks
+    let childStories: MissionStory[] = [];
+    try {
+      childStories = await fetchStories(`"Epic Link" = ${issueKey}`);
+    } catch {
+      childStories = await fetchStories(`parent = ${issueKey}`);
+    }
+    subtasks = childStories.map((s) => ({
+      key: s.key,
+      summary: s.summary,
+      status: s.status,
+      statusCategory: s.statusCategory,
+      assignee: s.assignee,
+      avatarUrl: s.avatarUrl,
+      prState: s.prState,
+    }));
+  } else {
+    const subtasksRaw = (fields.subtasks ?? issue.fields.subtasks) as
+      Array<{ key: string }> | undefined;
+    const subtaskKeys = (subtasksRaw ?? []).map((st) => st.key);
+
+    if (subtaskKeys.length > 0) {
+      const keysJql = subtaskKeys.map((k) => `"${k}"`).join(", ");
+      const subtaskResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+        jql: `key IN (${keysJql}) ORDER BY rank ASC`,
+        maxResults: subtaskKeys.length,
+        fields: ["summary", "status", "assignee", "customfield_10000"],
+      });
+      subtasks = (subtaskResult.issues ?? []).map((st) => {
+        const assignee = st.fields.assignee as {
+          displayName?: string;
+          avatarUrls?: Record<string, string>;
+        } | null;
+        const stFields = st.fields as Record<string, unknown>;
+        return {
+          key: st.key!,
+          summary: st.fields.summary,
+          status: st.fields.status?.name ?? "Unknown",
+          statusCategory: st.fields.status?.statusCategory?.key ?? "new",
+          assignee: assignee?.displayName ?? "Unassigned",
+          avatarUrl: assignee?.avatarUrls?.["32x32"] ?? null,
+          prState: parsePrField(stFields.customfield_10000 as string | null),
+        };
+      });
+    }
   }
 
   return {
@@ -359,6 +381,7 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
     summary: issue.fields.summary,
     status: issue.fields.status?.name ?? "Unknown",
     statusCategory: issue.fields.status?.statusCategory?.key ?? "new",
+    issuetype,
     description: issue.fields.description ?? null,
     acceptanceCriteria: (fields.customfield_11101 as unknown) ?? null,
     subtasks,

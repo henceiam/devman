@@ -130,6 +130,7 @@ export interface StoryDetailResponse {
   summary: string;
   status: string;
   statusCategory: string;
+  issuetype: string;
   description: unknown | null;
   acceptanceCriteria: unknown | null;
   subtasks: SubtaskItem[];

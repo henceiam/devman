@@ -113,7 +113,7 @@ function renderAdfNode(node: AdfNode): React.ReactNode {
   }
 }
 
-function SubtaskKanban({ subtasks, hideDone }: { subtasks: SubtaskItem[]; hideDone: boolean }) {
+function SubtaskKanban({ subtasks, hideDone, isEpic }: { subtasks: SubtaskItem[]; hideDone: boolean; isEpic?: boolean }) {
   const columns: { label: string; category: string; borderColor: string }[] = [
     { label: "To Do", category: "new", borderColor: "border-gray-300" },
     { label: "In Progress", category: "indeterminate", borderColor: "border-orange-300" },
@@ -163,7 +163,7 @@ function SubtaskKanban({ subtasks, hideDone }: { subtasks: SubtaskItem[]; hideDo
                 </div>
               ))}
               {items.length === 0 && (
-                <p className="text-xs text-gray-400 italic">No subtasks</p>
+                <p className="text-xs text-gray-400 italic">{isEpic ? "No stories" : "No subtasks"}</p>
               )}
             </div>
           </div>
@@ -256,7 +256,7 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
-              Subtasks ({detail.subtasks.length})
+              {detail.issuetype === "Epic" ? "Stories" : "Subtasks"} ({detail.subtasks.length})
             </button>
             <button
               onClick={() => setActiveTab("details")}
@@ -291,9 +291,11 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
 
           {detail && activeTab === "subtasks" && (
             detail.subtasks.length > 0 ? (
-              <SubtaskKanban subtasks={detail.subtasks} hideDone={hideDone} />
+              <SubtaskKanban subtasks={detail.subtasks} hideDone={hideDone} isEpic={detail.issuetype === "Epic"} />
             ) : (
-              <p className="text-sm text-gray-400 italic">No subtasks</p>
+              <p className="text-sm text-gray-400 italic">
+                {detail.issuetype === "Epic" ? "No stories" : "No subtasks"}
+              </p>
             )
           )}
 
