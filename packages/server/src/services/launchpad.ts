@@ -58,6 +58,7 @@ export interface InProgressItem {
   milestone: string | null;
   size: string | null;
   prState: PrState | null;
+  progress: { done: number; total: number } | null;
 }
 
 export async function getLaunchpadEscalated(): Promise<EscalatedTicket[]> {
@@ -130,7 +131,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
     maxResults: 200,
     fields: [
       "summary", "status", "issuetype", "assignee",
-      "customfield_11357", "customfield_11477", "customfield_10000", "customfield_10014", "parent",
+      "customfield_11357", "customfield_11477", "customfield_10000", "customfield_10014", "parent", "subtasks",
     ],
   });
 
@@ -167,6 +168,47 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
     return null;
   }
 
+  // Build story progress map for epics via a batch child-story query
+  const epicKeyList = [...epicKeys];
+  const epicProgressMap = new Map<string, { done: number; total: number }>();
+  if (epicKeyList.length > 0) {
+    const keyList = epicKeyList.map((k) => `"${k}"`).join(", ");
+    try {
+      let childResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+        jql: `"Epic Link" in (${keyList})`,
+        maxResults: 500,
+        fields: ["status", "customfield_10014"],
+      }).catch(() => null);
+      // Fallback to parent field for next-gen projects
+      if (!childResult || (childResult.issues ?? []).length === 0) {
+        childResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+          jql: `parent in (${keyList})`,
+          maxResults: 500,
+          fields: ["status", "parent"],
+        });
+      }
+      for (const child of childResult?.issues ?? []) {
+        const cf = (child.fields as Record<string, unknown>);
+        // Resolve which epic this child belongs to
+        const epicLink = cf.customfield_10014;
+        const parentObj = cf.parent as { key?: string } | null;
+        const ownerKey =
+          (typeof epicLink === "string" ? epicLink : null) ??
+          (epicLink && typeof epicLink === "object" && "key" in epicLink ? (epicLink as { key: string }).key : null) ??
+          parentObj?.key ?? null;
+        if (!ownerKey || !epicKeys.has(ownerKey)) continue;
+        const cat = child.fields.status?.statusCategory?.key ?? "new";
+        const prev = epicProgressMap.get(ownerKey) ?? { done: 0, total: 0 };
+        epicProgressMap.set(ownerKey, {
+          done: prev.done + (cat === "done" ? 1 : 0),
+          total: prev.total + 1,
+        });
+      }
+    } catch {
+      // Progress unavailable — not critical
+    }
+  }
+
   return issues
     // Filter out stories whose epic is already shown in the list
     .filter((issue) => {
@@ -184,6 +226,20 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
       avatarUrls?: Record<string, string>;
     } | null;
 
+    // Compute progress
+    let progress: { done: number; total: number } | null = null;
+    if (issue.fields.issuetype?.name === "Epic") {
+      progress = epicProgressMap.get(issue.key!) ?? null;
+    } else {
+      // Story: use inline subtasks
+      const subtasks = (fields.subtasks ?? issue.fields.subtasks) as
+        Array<{ fields: { status: { statusCategory: { key: string } } } }> | undefined;
+      if (subtasks && subtasks.length > 0) {
+        const done = subtasks.filter((s) => s.fields?.status?.statusCategory?.key === "done").length;
+        progress = { done, total: subtasks.length };
+      }
+    }
+
     return {
       key: issue.key!,
       summary: issue.fields.summary,
@@ -195,6 +251,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
       size: (fields.customfield_11357 as { value: string } | null)?.value ?? null,
       milestone: (fields.customfield_11477 as { value: string } | null)?.value ?? null,
       prState: parsePrField(fields.customfield_10000 as string | null),
+      progress,
     };
   });
 }

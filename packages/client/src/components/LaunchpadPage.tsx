@@ -61,6 +61,21 @@ function InProgressRow({
       {/* PR icon */}
       {item.prState && <PrStateIcon state={item.prState} />}
 
+      {/* Progress bar */}
+      {item.progress && item.progress.total > 0 && (
+        <div className="shrink-0 flex items-center gap-1.5">
+          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-200">
+            <div
+              className="h-full rounded-full bg-green-500 transition-all"
+              style={{ width: `${Math.round((item.progress.done / item.progress.total) * 100)}%` }}
+            />
+          </div>
+          <span className="text-[10px] text-gray-400">
+            {item.progress.done}/{item.progress.total}
+          </span>
+        </div>
+      )}
+
       {/* Avatar */}
       <div className="shrink-0">
         {item.avatarUrl ? (

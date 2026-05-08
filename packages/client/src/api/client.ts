@@ -171,6 +171,7 @@ export interface InProgressItem {
   milestone: string | null;
   size: string | null;
   prState: PrState | null;
+  progress: { done: number; total: number } | null;
 }
 
 export const api = {
