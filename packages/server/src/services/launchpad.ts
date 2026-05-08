@@ -174,22 +174,23 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
   if (epicKeyList.length > 0) {
     const keyList = epicKeyList.map((k) => `"${k}"`).join(", ");
     try {
+      // Try next-gen parent field first, fall back to classic Epic Link
       let childResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
-        jql: `"Epic Link" in (${keyList})`,
+        jql: `parent in (${keyList})`,
         maxResults: 500,
-        fields: ["status", "customfield_10014"],
+        fields: ["status", "parent"],
       }).catch(() => null);
-      // Fallback to parent field for next-gen projects
       if (!childResult || (childResult.issues ?? []).length === 0) {
         childResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
-          jql: `parent in (${keyList})`,
+          jql: `"Epic Link" in (${keyList})`,
           maxResults: 500,
-          fields: ["status", "parent"],
-        });
+          fields: ["status", "customfield_10014"],
+        }).catch(() => null);
       }
-      for (const child of childResult?.issues ?? []) {
+      const childIssues = childResult?.issues ?? [];
+      console.log(`[launchpad] epic progress: queried ${epicKeyList.length} epics, got ${childIssues.length} children`);
+      for (const child of childIssues) {
         const cf = (child.fields as Record<string, unknown>);
-        // Resolve which epic this child belongs to
         const epicLink = cf.customfield_10014;
         const parentObj = cf.parent as { key?: string } | null;
         const ownerKey =
@@ -214,9 +215,6 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
     .filter((issue) => {
       if (issue.fields.issuetype?.name === "Epic") return true;
       const epicKey = getEpicKey(issue);
-      // Temporary diagnostic log — remove once epic link field is confirmed
-      const fields = issue.fields as Record<string, unknown>;
-      console.log(`[launchpad] story ${issue.key} epicLink14=${JSON.stringify(fields.customfield_10014)} parent=${JSON.stringify(fields.parent)} → resolved epicKey=${epicKey} filtered=${!!epicKey && epicKeys.has(epicKey)}`);
       return !epicKey || !epicKeys.has(epicKey);
     })
     .map((issue) => {
