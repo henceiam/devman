@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink } from "react-router";
 import JiraPanel from "./components/JiraPanel";
 import GitHubPanel from "./components/GitHubPanel";
 import MissionPage from "./components/MissionPage";
+import SupportPage from "./components/SupportPage";
 import LaunchpadPage from "./components/LaunchpadPage";
 
 function Dashboard() {
@@ -46,6 +47,14 @@ export default function App() {
                 Missions
               </NavLink>
               <NavLink
+                to="/support"
+                className={({ isActive }) =>
+                  `text-sm font-medium ${isActive ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`
+                }
+              >
+                Support
+              </NavLink>
+              <NavLink
                 to="/launchpad"
                 className={({ isActive }) =>
                   `text-sm font-medium ${isActive ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`
@@ -60,6 +69,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/missions/:missionKey?" element={<MissionPage />} />
+          <Route path="/support" element={<SupportPage />} />
           <Route path="/launchpad" element={<LaunchpadPage />} />
         </Routes>
       </div>
