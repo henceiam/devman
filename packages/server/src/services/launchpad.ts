@@ -58,7 +58,7 @@ export interface InProgressItem {
   milestone: string | null;
   size: string | null;
   prState: PrState | null;
-  progress: { done: number; total: number } | null;
+  progress: { done: number; inProgress: number; total: number } | null;
 }
 
 export async function getLaunchpadEscalated(): Promise<EscalatedTicket[]> {
@@ -170,7 +170,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
 
   // Build story progress map for epics via a batch child-story query
   const epicKeyList = [...epicKeys];
-  const epicProgressMap = new Map<string, { done: number; total: number }>();
+  const epicProgressMap = new Map<string, { done: number; inProgress: number; total: number }>();
   if (epicKeyList.length > 0) {
     const keyList = epicKeyList.map((k) => `"${k}"`).join(", ");
     try {
@@ -199,9 +199,10 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
           parentObj?.key ?? null;
         if (!ownerKey || !epicKeys.has(ownerKey)) continue;
         const cat = child.fields.status?.statusCategory?.key ?? "new";
-        const prev = epicProgressMap.get(ownerKey) ?? { done: 0, total: 0 };
+        const prev = epicProgressMap.get(ownerKey) ?? { done: 0, inProgress: 0, total: 0 };
         epicProgressMap.set(ownerKey, {
           done: prev.done + (cat === "done" ? 1 : 0),
+          inProgress: prev.inProgress + (cat === "indeterminate" ? 1 : 0),
           total: prev.total + 1,
         });
       }
@@ -225,7 +226,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
     } | null;
 
     // Compute progress
-    let progress: { done: number; total: number } | null = null;
+    let progress: { done: number; inProgress: number; total: number } | null = null;
     if (issue.fields.issuetype?.name === "Epic") {
       progress = epicProgressMap.get(issue.key!) ?? null;
     } else {
@@ -234,7 +235,8 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
         Array<{ fields: { status: { statusCategory: { key: string } } } }> | undefined;
       if (subtasks && subtasks.length > 0) {
         const done = subtasks.filter((s) => s.fields?.status?.statusCategory?.key === "done").length;
-        progress = { done, total: subtasks.length };
+        const inProgress = subtasks.filter((s) => s.fields?.status?.statusCategory?.key === "indeterminate").length;
+        progress = { done, inProgress, total: subtasks.length };
       }
     }
 

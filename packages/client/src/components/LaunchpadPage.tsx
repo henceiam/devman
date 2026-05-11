@@ -62,19 +62,22 @@ function InProgressRow({
       {item.prState && <PrStateIcon state={item.prState} />}
 
       {/* Progress bar */}
-      {item.progress && item.progress.total > 0 && (
-        <div className="shrink-0 flex items-center gap-1.5">
-          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-200">
-            <div
-              className="h-full rounded-full bg-green-500 transition-all"
-              style={{ width: `${Math.round((item.progress.done / item.progress.total) * 100)}%` }}
-            />
+      {item.progress && item.progress.total > 0 && (() => {
+        const { done, inProgress, total } = item.progress;
+        const donePct = (done / total) * 100;
+        const inProgPct = (inProgress / total) * 100;
+        return (
+          <div className="shrink-0 flex items-center gap-1.5">
+            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-200 flex">
+              <div className="h-full bg-green-500" style={{ width: `${donePct}%` }} />
+              <div className="h-full bg-orange-400" style={{ width: `${inProgPct}%` }} />
+            </div>
+            <span className="text-[10px] text-gray-400">
+              {done}/{total}
+            </span>
           </div>
-          <span className="text-[10px] text-gray-400">
-            {item.progress.done}/{item.progress.total}
-          </span>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Avatar */}
       <div className="shrink-0">
