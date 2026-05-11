@@ -172,7 +172,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
   const epicKeyList = [...epicKeys];
   const epicProgressMap = new Map<string, { done: number; inProgress: number; total: number }>();
   if (epicKeyList.length > 0) {
-    const keyList = epicKeyList.map((k) => `"${k}"`).join(", ");
+    const keyList = epicKeyList.join(", ");
     try {
       // Run both queries in parallel — some projects use "parent" (next-gen), others use Epic Link (classic)
       const [parentResult, epicLinkResult] = await Promise.all([
@@ -199,7 +199,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
         return true;
       });
 
-      console.log(`[launchpad] epic progress: queried ${epicKeyList.length} epics, got ${childIssues.length} children (non-rejected will be counted)`);
+      const perEpic: Record<string, number> = {};
       for (const child of childIssues) {
         const cf = (child.fields as Record<string, unknown>);
         const epicLink = cf.customfield_10014;
@@ -208,6 +208,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
           (typeof epicLink === "string" ? epicLink : null) ??
           (epicLink && typeof epicLink === "object" && "key" in epicLink ? (epicLink as { key: string }).key : null) ??
           parentObj?.key ?? null;
+        if (ownerKey) perEpic[ownerKey] = (perEpic[ownerKey] ?? 0) + 1;
         if (!ownerKey || !epicKeys.has(ownerKey)) continue;
         const statusName = child.fields.status?.name ?? "";
         if (statusName === "Rejected") continue;
@@ -219,6 +220,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
           total: prev.total + 1,
         });
       }
+      console.log(`[launchpad] epic progress: ${epicKeyList.length} epics, ${childIssues.length} children total. Per-epic child counts:`, perEpic);
     } catch {
       // Progress unavailable — not critical
     }
