@@ -174,21 +174,32 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
   if (epicKeyList.length > 0) {
     const keyList = epicKeyList.map((k) => `"${k}"`).join(", ");
     try {
-      // Try next-gen parent field first, fall back to classic Epic Link
-      let childResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
-        jql: `parent in (${keyList})`,
-        maxResults: 500,
-        fields: ["status", "parent"],
-      }).catch(() => null);
-      if (!childResult || (childResult.issues ?? []).length === 0) {
-        childResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+      // Run both queries in parallel — some projects use "parent" (next-gen), others use Epic Link (classic)
+      const [parentResult, epicLinkResult] = await Promise.all([
+        jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+          jql: `parent in (${keyList})`,
+          maxResults: 500,
+          fields: ["status", "parent"],
+        }).catch(() => null),
+        jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
           jql: `"Epic Link" in (${keyList})`,
           maxResults: 500,
           fields: ["status", "customfield_10014"],
-        }).catch(() => null);
-      }
-      const childIssues = childResult?.issues ?? [];
-      console.log(`[launchpad] epic progress: queried ${epicKeyList.length} epics, got ${childIssues.length} children`);
+        }).catch(() => null),
+      ]);
+
+      // Merge and deduplicate by issue key
+      const seen = new Set<string>();
+      const childIssues = [
+        ...(parentResult?.issues ?? []),
+        ...(epicLinkResult?.issues ?? []),
+      ].filter((c) => {
+        if (seen.has(c.key!)) return false;
+        seen.add(c.key!);
+        return true;
+      });
+
+      console.log(`[launchpad] epic progress: queried ${epicKeyList.length} epics, got ${childIssues.length} children (non-rejected will be counted)`);
       for (const child of childIssues) {
         const cf = (child.fields as Record<string, unknown>);
         const epicLink = cf.customfield_10014;
@@ -198,6 +209,8 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
           (epicLink && typeof epicLink === "object" && "key" in epicLink ? (epicLink as { key: string }).key : null) ??
           parentObj?.key ?? null;
         if (!ownerKey || !epicKeys.has(ownerKey)) continue;
+        const statusName = child.fields.status?.name ?? "";
+        if (statusName === "Rejected") continue;
         const cat = child.fields.status?.statusCategory?.key ?? "new";
         const prev = epicProgressMap.get(ownerKey) ?? { done: 0, inProgress: 0, total: 0 };
         epicProgressMap.set(ownerKey, {
@@ -230,13 +243,14 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
     if (issue.fields.issuetype?.name === "Epic") {
       progress = epicProgressMap.get(issue.key!) ?? null;
     } else {
-      // Story: use inline subtasks
+      // Story: use inline subtasks, excluding Rejected
       const subtasks = (fields.subtasks ?? issue.fields.subtasks) as
-        Array<{ fields: { status: { statusCategory: { key: string } } } }> | undefined;
+        Array<{ fields: { status: { name: string; statusCategory: { key: string } } } }> | undefined;
       if (subtasks && subtasks.length > 0) {
-        const done = subtasks.filter((s) => s.fields?.status?.statusCategory?.key === "done").length;
-        const inProgress = subtasks.filter((s) => s.fields?.status?.statusCategory?.key === "indeterminate").length;
-        progress = { done, inProgress, total: subtasks.length };
+        const relevant = subtasks.filter((s) => s.fields?.status?.name !== "Rejected");
+        const done = relevant.filter((s) => s.fields?.status?.statusCategory?.key === "done").length;
+        const inProgress = relevant.filter((s) => s.fields?.status?.statusCategory?.key === "indeterminate").length;
+        progress = { done, inProgress, total: relevant.length };
       }
     }
 
