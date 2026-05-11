@@ -178,21 +178,51 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
       const [parentResult, epicLinkResult] = await Promise.all([
         jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
           jql: `parent in (${keyList})`,
-          maxResults: 500,
+          maxResults: 100,
           fields: ["status", "parent"],
         }).catch(() => null),
         jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
           jql: `"Epic Link" in (${keyList})`,
-          maxResults: 500,
-          fields: ["status", "customfield_10014"],
+          maxResults: 100,
+          fields: ["status", "customfield_10014", "parent"],
         }).catch(() => null),
+      ]);
+
+      console.log(`[launchpad] parentResult: ${parentResult?.issues?.length ?? "null"} issues, epicLinkResult: ${epicLinkResult?.issues?.length ?? "null"} issues`);
+
+      // Paginate if Jira returned a nextPageToken (cursor-based pagination)
+      async function fetchAllPages(
+        baseJql: string,
+        baseFields: string[],
+        firstPage: { issues?: unknown[]; nextPageToken?: string } | null,
+      ): Promise<{ fields: Record<string, unknown>; key?: string }[]> {
+        if (!firstPage) return [];
+        const all = [...(firstPage.issues ?? [])] as { fields: Record<string, unknown>; key?: string }[];
+        let nextPageToken = firstPage.nextPageToken;
+        while (nextPageToken) {
+          const page = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+            jql: baseJql,
+            maxResults: 100,
+            nextPageToken,
+            fields: baseFields,
+          }).catch(() => null);
+          if (!page?.issues?.length) break;
+          all.push(...(page.issues as { fields: Record<string, unknown>; key?: string }[]));
+          nextPageToken = page.nextPageToken;
+        }
+        return all;
+      }
+
+      const [parentIssues, epicLinkIssues] = await Promise.all([
+        fetchAllPages(`parent in (${keyList})`, ["status", "parent"], parentResult),
+        fetchAllPages(`"Epic Link" in (${keyList})`, ["status", "customfield_10014", "parent"], epicLinkResult),
       ]);
 
       // Merge and deduplicate by issue key
       const seen = new Set<string>();
       const childIssues = [
-        ...(parentResult?.issues ?? []),
-        ...(epicLinkResult?.issues ?? []),
+        ...parentIssues,
+        ...epicLinkIssues,
       ].filter((c) => {
         if (seen.has(c.key!)) return false;
         seen.add(c.key!);
@@ -201,7 +231,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
 
       const perEpic: Record<string, number> = {};
       for (const child of childIssues) {
-        const cf = (child.fields as Record<string, unknown>);
+        const cf = child.fields;
         const epicLink = cf.customfield_10014;
         const parentObj = cf.parent as { key?: string } | null;
         const ownerKey =
@@ -210,9 +240,10 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
           parentObj?.key ?? null;
         if (ownerKey) perEpic[ownerKey] = (perEpic[ownerKey] ?? 0) + 1;
         if (!ownerKey || !epicKeys.has(ownerKey)) continue;
-        const statusName = child.fields.status?.name ?? "";
+        const status = cf.status as { name?: string; statusCategory?: { key?: string } } | null;
+        const statusName = status?.name ?? "";
         if (statusName === "Rejected") continue;
-        const cat = child.fields.status?.statusCategory?.key ?? "new";
+        const cat = status?.statusCategory?.key ?? "new";
         const prev = epicProgressMap.get(ownerKey) ?? { done: 0, inProgress: 0, total: 0 };
         epicProgressMap.set(ownerKey, {
           done: prev.done + (cat === "done" ? 1 : 0),
