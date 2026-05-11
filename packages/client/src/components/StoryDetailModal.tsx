@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { api, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse } from "../api/client";
 import { statusBadge } from "./statusUtils";
 import PrStateIcon from "./PrStateIcon";
@@ -177,7 +178,7 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
   const [detail, setDetail] = useState<StoryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"subtasks" | "details" | "github">("subtasks");
+  const [activeTab, setActiveTab] = useState<"subtasks" | "details" | "plan" | "github">("subtasks");
   const [githubData, setGithubData] = useState<StoryGitHubResponse | null>(null);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
@@ -268,6 +269,18 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
             >
               Details
             </button>
+            {detail.implementationPlan && (
+              <button
+                onClick={() => setActiveTab("plan")}
+                className={`border-b-2 px-3 py-2 text-xs font-medium transition ${
+                  activeTab === "plan"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Implementation Plan
+              </button>
+            )}
             {detail.prState && (
               <button
                 onClick={handleGithubTab}
@@ -309,6 +322,12 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
                 <h3 className="mb-2 text-sm font-semibold text-gray-700">Acceptance Criteria</h3>
                 {renderContent(detail.acceptanceCriteria)}
               </div>
+            </div>
+          )}
+
+          {detail && activeTab === "plan" && (
+            <div className="prose prose-sm max-w-none text-gray-700">
+              <ReactMarkdown>{detail.implementationPlan!}</ReactMarkdown>
             </div>
           )}
 
