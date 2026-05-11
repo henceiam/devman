@@ -125,6 +125,15 @@ export interface SubtaskItem {
   prState: PrState | null;
 }
 
+export interface CommentItem {
+  id: string;
+  author: string;
+  avatarUrl: string | null;
+  body: unknown | null;
+  created: string;
+  updated: string;
+}
+
 export interface StoryDetailResponse {
   key: string;
   summary: string;
@@ -213,6 +222,8 @@ export const api = {
       fetchJson<StoryDetailResponse>(`/missions/stories/${encodeURIComponent(storyKey)}`),
     getStoryGithub: (storyKey: string) =>
       fetchJson<StoryGitHubResponse>(`/missions/stories/${encodeURIComponent(storyKey)}/github`),
+    getStoryComments: (storyKey: string) =>
+      fetchJson<{ comments: CommentItem[] }>(`/missions/stories/${encodeURIComponent(storyKey)}/comments`),
   },
   launchpad: {
     getEscalated: () =>

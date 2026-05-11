@@ -30,6 +30,18 @@ missionsRouter.get("/:key", async (req: Request<{ key: string }>, res: Response)
   }
 });
 
+missionsRouter.get("/stories/:storyKey/comments", async (req: Request<{ storyKey: string }>, res: Response) => {
+  try {
+    const { storyKey } = req.params;
+    const comments = await missionService.getStoryComments(storyKey);
+    res.json({ comments });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Missions GET /stories/${req.params.storyKey}/comments error:`, message);
+    res.status(500).json({ error: message });
+  }
+});
+
 missionsRouter.get("/stories/:storyKey/github", async (req: Request<{ storyKey: string }>, res: Response) => {
   try {
     const { storyKey } = req.params;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { api, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse } from "../api/client";
+import { api, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse, type CommentItem } from "../api/client";
 import { statusBadge } from "./statusUtils";
 import PrStateIcon from "./PrStateIcon";
 import GitHubPrTab from "./GitHubPrTab";
@@ -178,25 +178,36 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
   const [detail, setDetail] = useState<StoryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"subtasks" | "details" | "plan" | "github">("subtasks");
+  const [activeTab, setActiveTab] = useState<"subtasks" | "details" | "plan" | "github" | "comments">("subtasks");
   const [githubData, setGithubData] = useState<StoryGitHubResponse | null>(null);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
+  const [comments, setComments] = useState<CommentItem[] | null>(null);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
     setGithubData(null);
     setGithubError(null);
+    setComments(null);
+    setCommentsError(null);
     api.missions
       .getStoryDetail(storyKey)
       .then((data) => {
         setDetail(data);
-        // Default to subtasks tab if there are subtasks, else details
         setActiveTab(data.subtasks.length > 0 ? "subtasks" : "details");
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
+    // Load comments in parallel
+    setCommentsLoading(true);
+    api.missions
+      .getStoryComments(storyKey)
+      .then((data) => setComments(data.comments))
+      .catch((e) => setCommentsError(e.message))
+      .finally(() => setCommentsLoading(false));
   }, [storyKey]);
 
   const handleGithubTab = () => {
@@ -294,6 +305,16 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
                 GitHub
               </button>
             )}
+            <button
+              onClick={() => setActiveTab("comments")}
+              className={`border-b-2 px-3 py-2 text-xs font-medium transition ${
+                activeTab === "comments"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Comments{comments !== null ? ` (${comments.length})` : commentsLoading ? " (…)" : ""}
+            </button>
           </div>
         )}
 
@@ -329,6 +350,37 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
             <div className="prose prose-sm max-w-none text-gray-700">
               <ReactMarkdown>{detail.implementationPlan!}</ReactMarkdown>
             </div>
+          )}
+
+          {detail && activeTab === "comments" && (
+            commentsLoading ? (
+              <p className="text-sm text-gray-500">Loading comments…</p>
+            ) : commentsError ? (
+              <p className="text-sm text-red-600">Error: {commentsError}</p>
+            ) : comments && comments.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">No comments</p>
+            ) : (
+              <div className="space-y-4">
+                {(comments ?? []).map((c) => (
+                  <div key={c.id} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <div className="mb-2 flex items-center gap-2">
+                      {c.avatarUrl ? (
+                        <img src={c.avatarUrl} alt={c.author} className="h-6 w-6 rounded-full" />
+                      ) : (
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-300 text-[9px] font-medium text-gray-600">
+                          {c.author.split(/\s+/).map(w => w[0]).join("").toUpperCase().slice(0, 2)}
+                        </span>
+                      )}
+                      <span className="text-xs font-medium text-gray-700">{c.author}</span>
+                      <span className="text-[10px] text-gray-400">{new Date(c.created).toLocaleString()}</span>
+                    </div>
+                    <div className="prose prose-sm max-w-none text-gray-700">
+                      {renderContent(c.body)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
 
           {activeTab === "github" && (

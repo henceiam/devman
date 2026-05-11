@@ -71,6 +71,15 @@ export interface SubtaskItem {
   prState: PrState | null;
 }
 
+export interface CommentItem {
+  id: string;
+  author: string;
+  avatarUrl: string | null;
+  body: unknown | null;
+  created: string;
+  updated: string;
+}
+
 export interface StoryDetailResponse {
   key: string;
   summary: string;
@@ -389,6 +398,27 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
     subtasks,
     prState: parsePrField(fields.customfield_10000 as string | null),
   };
+}
+
+/** Fetch comments for a story or epic */
+export async function getStoryComments(issueKey: string): Promise<CommentItem[]> {
+  const jira = getClient();
+  const result = await jira.issueComments.getComments({
+    issueIdOrKey: issueKey,
+    maxResults: 100,
+    orderBy: "created",
+  });
+  return (result.comments ?? []).map((c) => {
+    const author = c.author as { displayName?: string; avatarUrls?: Record<string, string> } | undefined;
+    return {
+      id: c.id ?? "",
+      author: author?.displayName ?? "Unknown",
+      avatarUrl: author?.avatarUrls?.["32x32"] ?? null,
+      body: c.body ?? null,
+      created: c.created ?? "",
+      updated: c.updated ?? "",
+    };
+  });
 }
 
 /** Parse a GitHub PR URL into owner, repo, and PR number */
