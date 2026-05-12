@@ -127,7 +127,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
   const jira = getClient();
 
   const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
-    jql: `project = "EBBACKLOG" AND issuetype in (Story, Epic) AND "Product teams[Checkboxes]" in (Radicals) AND status in ("In Progress", "Code review", "Ready for test") ORDER BY status ASC, updated DESC`,
+    jql: `project = "EBBACKLOG" AND issuetype not in (subTaskIssueTypes()) AND "Product teams[Checkboxes]" in (Radicals) AND status in ("In Progress", "Code review", "Ready for test") ORDER BY status ASC, updated DESC`,
     maxResults: 200,
     fields: [
       "summary", "status", "issuetype", "assignee",
