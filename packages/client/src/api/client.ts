@@ -184,6 +184,12 @@ export interface InProgressItem {
   progress: { done: number; inProgress: number; total: number } | null;
 }
 
+export interface DiagnosticStep {
+  name: string;
+  status: "pass" | "fail" | "skip";
+  detail: string;
+}
+
 export const api = {
   jira: {
     getProjects: () =>
@@ -192,6 +198,8 @@ export const api = {
       fetchJson<{ issues: JiraIssue[] }>(
         `/jira/issues?project=${encodeURIComponent(project)}&maxResults=${maxResults}`,
       ),
+    runDiagnostics: () =>
+      fetchJson<{ steps: DiagnosticStep[] }>("/jira/diagnostics"),
   },
   github: {
     getRepos: () =>

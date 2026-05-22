@@ -3,6 +3,17 @@ import * as jiraService from "../services/jira.js";
 
 export const jiraRouter: IRouter = Router();
 
+jiraRouter.get("/diagnostics", async (_req: Request, res: Response) => {
+  try {
+    const steps = await jiraService.runDiagnostics();
+    res.json({ steps });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Jira /diagnostics error:", message);
+    res.status(500).json({ error: message });
+  }
+});
+
 jiraRouter.get("/projects", async (_req: Request, res: Response) => {
   try {
     const projects = await jiraService.getProjects();

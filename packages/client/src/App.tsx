@@ -5,6 +5,7 @@ import GitHubPanel from "./components/GitHubPanel";
 import MissionPage from "./components/MissionPage";
 import SupportPage from "./components/SupportPage";
 import LaunchpadPage from "./components/LaunchpadPage";
+import DiagnosticsPage from "./components/DiagnosticsPage";
 
 function Dashboard() {
   return (
@@ -62,6 +63,14 @@ export default function App() {
               >
                 Launchpad
               </NavLink>
+              <NavLink
+                to="/diagnostics"
+                className={({ isActive }) =>
+                  `text-sm font-medium ${isActive ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`
+                }
+              >
+                Diagnostics
+              </NavLink>
             </nav>
           </div>
         </header>
@@ -71,6 +80,7 @@ export default function App() {
           <Route path="/missions/:missionKey?" element={<MissionPage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/launchpad" element={<LaunchpadPage />} />
+          <Route path="/diagnostics" element={<DiagnosticsPage />} />
         </Routes>
       </div>
     </BrowserRouter>
