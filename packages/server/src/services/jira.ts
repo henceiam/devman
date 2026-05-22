@@ -61,21 +61,26 @@ export async function runDiagnostics(): Promise<DiagnosticStep[]> {
     return steps;
   }
 
-  const hostWarnings: string[] = [];
-  if (config.jira.host.endsWith("/")) hostWarnings.push("JIRA_HOST has a trailing slash — remove it");
-  if (!config.jira.host.startsWith("https://")) hostWarnings.push("JIRA_HOST should start with https://");
-  if (!config.jira.host.includes("atlassian.net")) hostWarnings.push("JIRA_HOST does not look like an Atlassian Cloud URL (expected *.atlassian.net)");
+  const warnings: string[] = [];
+  if (config.jira.host.endsWith("/")) warnings.push("JIRA_HOST has a trailing slash — remove it");
+  if (!config.jira.host.startsWith("https://")) warnings.push("JIRA_HOST should start with https://");
+  if (!config.jira.host.includes("atlassian.net")) warnings.push("JIRA_HOST does not look like an Atlassian Cloud URL (expected *.atlassian.net)");
+  if (config.jira.email !== config.jira.email.trim()) warnings.push("JIRA_EMAIL has leading/trailing whitespace");
+  if (config.jira.apiToken !== config.jira.apiToken.trim()) warnings.push("JIRA_API_TOKEN has leading/trailing whitespace");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.jira.email)) warnings.push(`JIRA_EMAIL does not look like a valid email address: "${config.jira.email}"`);
 
   const maskedToken = config.jira.apiToken.slice(0, 4) + "****" + config.jira.apiToken.slice(-4);
-  const configDetail = `host=${config.jira.host}, email=${config.jira.email}, apiToken=${maskedToken}`;
+  const tokenLen = config.jira.apiToken.length;
+  const configDetail = `host=${config.jira.host} | email="${config.jira.email}" | apiToken=${maskedToken} (${tokenLen} chars)`;
   steps.push({
     name: "Config",
-    status: hostWarnings.length > 0 ? "fail" : "pass",
-    detail: hostWarnings.length > 0 ? `${configDetail} — WARNING: ${hostWarnings.join("; ")}` : configDetail,
+    status: warnings.length > 0 ? "fail" : "pass",
+    detail: warnings.length > 0 ? `${configDetail} — WARNING: ${warnings.join("; ")}` : configDetail,
   });
 
-  if (hostWarnings.length > 0) {
-    steps.push({ name: "Auth", status: "skip", detail: "Skipped due to config warnings" });
+  if (warnings.length > 0) {
+    steps.push({ name: "Auth (raw HTTP)", status: "skip", detail: "Skipped due to config warnings" });
+    steps.push({ name: "Auth (jira.js)", status: "skip", detail: "Skipped due to config warnings" });
     steps.push({ name: "Projects", status: "skip", detail: "Skipped due to config warnings" });
     steps.push({ name: "Issues", status: "skip", detail: "Skipped due to config warnings" });
     return steps;
