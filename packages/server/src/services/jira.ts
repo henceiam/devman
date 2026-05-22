@@ -61,28 +61,79 @@ export async function runDiagnostics(): Promise<DiagnosticStep[]> {
     return steps;
   }
 
+  const hostWarnings: string[] = [];
+  if (config.jira.host.endsWith("/")) hostWarnings.push("JIRA_HOST has a trailing slash — remove it");
+  if (!config.jira.host.startsWith("https://")) hostWarnings.push("JIRA_HOST should start with https://");
+  if (!config.jira.host.includes("atlassian.net")) hostWarnings.push("JIRA_HOST does not look like an Atlassian Cloud URL (expected *.atlassian.net)");
+
   const maskedToken = config.jira.apiToken.slice(0, 4) + "****" + config.jira.apiToken.slice(-4);
+  const configDetail = `host=${config.jira.host}, email=${config.jira.email}, apiToken=${maskedToken}`;
   steps.push({
     name: "Config",
-    status: "pass",
-    detail: `host=${config.jira.host}, email=${config.jira.email}, apiToken=${maskedToken}`,
+    status: hostWarnings.length > 0 ? "fail" : "pass",
+    detail: hostWarnings.length > 0 ? `${configDetail} — WARNING: ${hostWarnings.join("; ")}` : configDetail,
   });
 
-  // Step 2: auth
+  if (hostWarnings.length > 0) {
+    steps.push({ name: "Auth", status: "skip", detail: "Skipped due to config warnings" });
+    steps.push({ name: "Projects", status: "skip", detail: "Skipped due to config warnings" });
+    steps.push({ name: "Issues", status: "skip", detail: "Skipped due to config warnings" });
+    return steps;
+  }
+
+  // Step 2: raw HTTP auth (bypasses jira.js to isolate credential vs library issues)
+  const rawCredential = Buffer.from(`${config.jira.email}:${config.jira.apiToken}`).toString("base64");
+  try {
+    const rawRes = await fetch(`${config.jira.host}/rest/api/3/myself`, {
+      headers: { Authorization: `Basic ${rawCredential}`, Accept: "application/json" },
+    });
+    if (rawRes.ok) {
+      const body = await rawRes.json() as { displayName?: string; emailAddress?: string };
+      steps.push({
+        name: "Auth (raw HTTP)",
+        status: "pass",
+        detail: `Direct fetch succeeded — authenticated as ${body.displayName} (${body.emailAddress})`,
+      });
+    } else {
+      const text = await rawRes.text().catch(() => "");
+      steps.push({
+        name: "Auth (raw HTTP)",
+        status: "fail",
+        detail: `HTTP ${rawRes.status} — credentials rejected by Jira directly. Check JIRA_EMAIL matches your Atlassian account and regenerate JIRA_API_TOKEN at https://id.atlassian.com/manage-profile/security/api-tokens. Response: ${text.slice(0, 200)}`,
+      });
+      steps.push({ name: "Auth (jira.js)", status: "skip", detail: "Skipped — raw HTTP already failed" });
+      steps.push({ name: "Projects", status: "skip", detail: "Skipped due to auth failure" });
+      steps.push({ name: "Issues", status: "skip", detail: "Skipped due to auth failure" });
+      return steps;
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    steps.push({ name: "Auth (raw HTTP)", status: "fail", detail: `Network error: ${msg}` });
+    steps.push({ name: "Auth (jira.js)", status: "skip", detail: "Skipped — raw HTTP failed" });
+    steps.push({ name: "Projects", status: "skip", detail: "Skipped due to auth failure" });
+    steps.push({ name: "Issues", status: "skip", detail: "Skipped due to auth failure" });
+    return steps;
+  }
+
+  // Step 3: auth via jira.js client
   let jira: ReturnType<typeof getClient>;
   try {
     jira = getClient();
     const me = await jira.myself.getCurrentUser();
     steps.push({
-      name: "Auth",
+      name: "Auth (jira.js)",
       status: "pass",
-      detail: `Authenticated as ${me.displayName} (${me.emailAddress})`,
+      detail: `jira.js authenticated as ${me.displayName} (${me.emailAddress})`,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    steps.push({ name: "Auth", status: "fail", detail: msg });
-    steps.push({ name: "Projects", status: "skip", detail: "Skipped due to auth failure" });
-    steps.push({ name: "Issues", status: "skip", detail: "Skipped due to auth failure" });
+    steps.push({
+      name: "Auth (jira.js)",
+      status: "fail",
+      detail: `Raw HTTP passed but jira.js failed — likely a jira.js configuration bug. Error: ${msg}`,
+    });
+    steps.push({ name: "Projects", status: "skip", detail: "Skipped due to jira.js auth failure" });
+    steps.push({ name: "Issues", status: "skip", detail: "Skipped due to jira.js auth failure" });
     return steps;
   }
 
