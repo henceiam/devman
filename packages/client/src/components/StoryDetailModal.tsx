@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import { api, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse, type CommentItem } from "../api/client";
 import { statusBadge } from "./statusUtils";
 import PrStateIcon from "./PrStateIcon";
@@ -280,7 +279,7 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
             >
               Details
             </button>
-            {detail.implementationPlan && (
+            {detail.implementationPlan != null && (
               <button
                 onClick={() => setActiveTab("plan")}
                 className={`border-b-2 px-3 py-2 text-xs font-medium transition ${
@@ -346,11 +345,7 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
             </div>
           )}
 
-          {detail && activeTab === "plan" && (
-            <div className="prose prose-sm max-w-none text-gray-700">
-              <ReactMarkdown>{detail.implementationPlan!}</ReactMarkdown>
-            </div>
-          )}
+          {detail && activeTab === "plan" && renderContent(detail.implementationPlan)}
 
           {detail && activeTab === "comments" && (
             commentsLoading ? (

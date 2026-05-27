@@ -142,7 +142,7 @@ export interface StoryDetailResponse {
   issuetype: string;
   description: unknown | null;
   acceptanceCriteria: unknown | null;
-  implementationPlan: string | null;
+  implementationPlan: unknown | null;
   subtasks: SubtaskItem[];
   prState: PrState | null;
 }

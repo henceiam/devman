@@ -88,7 +88,7 @@ export interface StoryDetailResponse {
   issuetype: string;
   description: unknown | null;
   acceptanceCriteria: unknown | null;
-  implementationPlan: string | null;
+  implementationPlan: unknown | null;
   subtasks: SubtaskItem[];
   prState: PrState | null;
 }
@@ -394,7 +394,7 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
     issuetype,
     description: issue.fields.description ?? null,
     acceptanceCriteria: (fields.customfield_11101 as unknown) ?? null,
-    implementationPlan: (fields.customfield_11461 as string | null) ?? null,
+    implementationPlan: (fields.customfield_11461 as unknown) ?? null,
     subtasks,
     prState: parsePrField(fields.customfield_10000 as string | null),
   };

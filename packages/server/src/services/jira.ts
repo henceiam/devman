@@ -166,11 +166,11 @@ export async function runDiagnostics(): Promise<DiagnosticStep[]> {
       maxResults: 1,
       fields: ["summary"],
     });
-    const total = result.total ?? 0;
+    const count = result.issues?.length ?? 0;
     steps.push({
       name: "Issues",
       status: "pass",
-      detail: `JQL query succeeded — total issues accessible: ${total}`,
+      detail: `JQL query succeeded — issues returned: ${count}`,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
