@@ -61,6 +61,15 @@ export interface InProgressItem {
   progress: { done: number; inProgress: number; total: number } | null;
 }
 
+export async function setHideUntilDate(issueKey: string, date: string): Promise<void> {
+  const jira = getClient();
+  await jira.issues.editIssue({
+    issueIdOrKey: issueKey,
+    fields: { customfield_11465: date } as Record<string, unknown>,
+    notifyUsers: false,
+  });
+}
+
 export async function getLaunchpadEscalated(): Promise<EscalatedTicket[]> {
   const jira = getClient();
 
@@ -136,6 +145,29 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
   });
 
   const issues = result.issues ?? [];
+  console.log(`[launchpad] in-progress: Jira returned ${issues.length} issues`);
+  if (issues.length > 0) {
+    const byType: Record<string, number> = {};
+    const byStatus: Record<string, number> = {};
+    for (const i of issues) {
+      const t = i.fields.issuetype?.name ?? '?';
+      const s = i.fields.status?.name ?? '?';
+      byType[t] = (byType[t] ?? 0) + 1;
+      byStatus[s] = (byStatus[s] ?? 0) + 1;
+    }
+    console.log('[launchpad] in-progress: by type:', byType);
+  // Diagnostic: try without product team filter
+  const diagResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+    jql: 'project = "EBBACKLOG" AND issuetype not in (subTaskIssueTypes()) AND status in ("In Progress", "Code review", "Ready for test", "In Test") ORDER BY updated DESC',
+    maxResults: 3,
+    fields: ['summary', 'status', 'issuetype'],
+  }).catch((e: unknown) => { console.log('[launchpad] diag query error:', e); return null; });
+  console.log('[launchpad] diag (no team filter):', diagResult?.issues?.length ?? 'error', 'issues');
+  if (diagResult?.issues?.length) {
+    console.log('[launchpad] diag sample:', diagResult.issues[0].key, diagResult.issues[0].fields.status?.name);
+  }
+    console.log('[launchpad] in-progress: by status:', byStatus);
+  }
 
   // Collect epic keys that are in the result
   const epicKeys = new Set(

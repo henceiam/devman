@@ -14,82 +14,133 @@ function formatTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function getHideUntilDate(duration: "1w" | "1m"): string {
+  const d = new Date();
+  if (duration === "1w") d.setDate(d.getDate() + 7);
+  else d.setMonth(d.getMonth() + 1);
+  return d.toISOString().split("T")[0];
+}
+
 // ── In-progress item row ─────────────────────────────────────────────────────
 
 function InProgressRow({
   item,
   onOpen,
+  onHide,
 }: {
   item: InProgressItem;
   onOpen: (key: string) => void;
+  onHide: (key: string, duration: "1w" | "1m") => void;
 }) {
   const { bgColor } = getStatusStyle(item.status);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen]);
 
   return (
-    <button
-      onClick={() => onOpen(item.key)}
-      className="flex w-full items-center gap-3 rounded-lg border border-gray-200 px-4 py-2.5 text-left transition-shadow hover:shadow-md"
-      style={{ backgroundColor: bgColor }}
-    >
-      {/* Type badge */}
-      <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${item.type === "Epic" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
-        {item.type}
-      </span>
-
-      {/* Key */}
-      <span className="w-36 shrink-0">
-        <JiraLink issueKey={item.key} />
-      </span>
-
-      {/* Summary */}
-      <span className="min-w-0 flex-1 truncate text-sm text-gray-800">{item.summary}</span>
-
-      {/* Milestone */}
-      {item.milestone && (
-        <span className="shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-          {item.milestone}
+    <div className="group relative flex w-full items-stretch">
+      <button
+        onClick={() => onOpen(item.key)}
+        className="flex flex-1 items-center gap-3 rounded-lg border border-gray-200 px-4 py-2.5 pr-9 text-left transition-shadow hover:shadow-md"
+        style={{ backgroundColor: bgColor }}
+      >
+        {/* Type badge */}
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${item.type === "Epic" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+          {item.type}
         </span>
-      )}
 
-      {/* Size */}
-      {item.size && (
-        <span className="shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
-          {item.size}
+        {/* Key */}
+        <span className="w-36 shrink-0">
+          <JiraLink issueKey={item.key} />
         </span>
-      )}
 
-      {/* PR icon */}
-      {item.prState && <PrStateIcon state={item.prState} />}
+        {/* Summary */}
+        <span className="min-w-0 flex-1 truncate text-sm text-gray-800">{item.summary}</span>
 
-      {/* Progress bar */}
-      {item.progress && item.progress.total > 0 && (() => {
-        const { done, inProgress, total } = item.progress;
-        const donePct = (done / total) * 100;
-        const inProgPct = (inProgress / total) * 100;
-        return (
-          <div className="shrink-0 flex items-center gap-1.5">
-            <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-200 flex">
-              <div className="h-full bg-green-500" style={{ width: `${donePct}%` }} />
-              <div className="h-full bg-orange-400" style={{ width: `${inProgPct}%` }} />
+        {/* Milestone */}
+        {item.milestone && (
+          <span className="shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+            {item.milestone}
+          </span>
+        )}
+
+        {/* Size */}
+        {item.size && (
+          <span className="shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+            {item.size}
+          </span>
+        )}
+
+        {/* PR icon */}
+        {item.prState && <PrStateIcon state={item.prState} />}
+
+        {/* Progress bar */}
+        {item.progress && item.progress.total > 0 && (() => {
+          const { done, inProgress, total } = item.progress;
+          const donePct = (done / total) * 100;
+          const inProgPct = (inProgress / total) * 100;
+          return (
+            <div className="shrink-0 flex items-center gap-1.5">
+              <div className="h-1.5 w-16 overflow-hidden rounded-full bg-gray-200 flex">
+                <div className="h-full bg-green-500" style={{ width: `${donePct}%` }} />
+                <div className="h-full bg-orange-400" style={{ width: `${inProgPct}%` }} />
+              </div>
+              <span className="text-[10px] text-gray-400">
+                {done}/{total}
+              </span>
             </div>
-            <span className="text-[10px] text-gray-400">
-              {done}/{total}
-            </span>
-          </div>
-        );
-      })()}
+          );
+        })()}
 
-      {/* Avatar */}
-      <div className="shrink-0">
-        {item.avatarUrl ? (
-          <img src={item.avatarUrl} alt={item.assignee} className="h-6 w-6 rounded-full" title={item.assignee} />
-        ) : (
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs text-gray-600" title={item.assignee}>
-            {item.assignee.slice(0, 2).toUpperCase()}
+        {/* Avatar */}
+        <div className="shrink-0">
+          {item.avatarUrl ? (
+            <img src={item.avatarUrl} alt={item.assignee} className="h-6 w-6 rounded-full" title={item.assignee} />
+          ) : (
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs text-gray-600" title={item.assignee}>
+              {item.assignee.slice(0, 2).toUpperCase()}
+            </div>
+          )}
+        </div>
+      </button>
+
+      {/* Context menu */}
+      <div ref={menuRef} className="absolute right-1 top-1/2 z-10 -translate-y-1/2">
+        <button
+          onClick={(e) => { e.stopPropagation(); setMenuOpen((v) => !v); }}
+          className="rounded p-1 text-gray-300 opacity-0 transition-opacity hover:bg-gray-100 hover:text-gray-600 group-hover:opacity-100"
+          title="Hide options"
+        >
+          ⋯
+        </button>
+        {menuOpen && (
+          <div className="absolute right-0 top-full mt-1 min-w-[160px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+            <button
+              onClick={() => { onHide(item.key, "1w"); setMenuOpen(false); }}
+              className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Hide for 1 week
+            </button>
+            <button
+              onClick={() => { onHide(item.key, "1m"); setMenuOpen(false); }}
+              className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Hide for 1 month
+            </button>
           </div>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -115,6 +166,16 @@ export default function LaunchpadPage() {
       setLoading(false);
     }
   }, []);
+
+  const handleHide = useCallback(async (key: string, duration: "1w" | "1m") => {
+    const hideUntil = getHideUntilDate(duration);
+    setInProgress((prev) => prev.filter((i) => i.key !== key));
+    try {
+      await api.launchpad.hideIssue(key, hideUntil);
+    } catch {
+      fetchAll();
+    }
+  }, [fetchAll]);
 
   // Initial load + auto-refresh
   useEffect(() => {
@@ -205,7 +266,7 @@ export default function LaunchpadPage() {
                       </div>
                       <div className="space-y-1.5">
                         {items.map((item) => (
-                          <InProgressRow key={item.key} item={item} onOpen={setSelectedStoryKey} />
+                          <InProgressRow key={item.key} item={item} onOpen={setSelectedStoryKey} onHide={handleHide} />
                         ))}
                       </div>
                     </div>

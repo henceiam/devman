@@ -238,5 +238,16 @@ export const api = {
       fetchJson<{ tickets: EscalatedTicket[] }>("/launchpad/escalated"),
     getInProgress: () =>
       fetchJson<{ items: InProgressItem[] }>("/launchpad/in-progress"),
+    hideIssue: async (key: string, hideUntil: string): Promise<void> => {
+      const res = await fetch(`${API_BASE}/launchpad/issues/${encodeURIComponent(key)}/hide`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hideUntil }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || `API error: ${res.status}`);
+      }
+    },
   },
 };
