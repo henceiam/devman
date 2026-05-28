@@ -14,11 +14,26 @@ function formatTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
+function toLocalDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function getHideUntilDate(duration: "1w" | "1m"): string {
   const d = new Date();
   if (duration === "1w") d.setDate(d.getDate() + 7);
   else d.setMonth(d.getMonth() + 1);
-  return d.toISOString().split("T")[0];
+  return toLocalDateString(d);
+}
+
+function todayDateString(): string {
+  return toLocalDateString(new Date());
+}
+
+function isHidden(item: InProgressItem): boolean {
+  return !!item.hideUntil && item.hideUntil >= todayDateString();
 }
 
 // ── In-progress item row ─────────────────────────────────────────────────────
@@ -71,6 +86,12 @@ function InProgressRow({
         {item.milestone && (
           <span className="shrink-0 rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
             {item.milestone}
+          </span>
+        )}
+
+        {isHidden(item) && (
+          <span className="shrink-0 rounded bg-yellow-100 px-2 py-0.5 text-xs text-yellow-700">
+            Hidden until {item.hideUntil}
           </span>
         )}
 
@@ -152,6 +173,7 @@ export default function LaunchpadPage() {
   const [error, setError] = useState<string | null>(null);
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [selectedStoryKey, setSelectedStoryKey] = useState<string | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -169,7 +191,7 @@ export default function LaunchpadPage() {
 
   const handleHide = useCallback(async (key: string, duration: "1w" | "1m") => {
     const hideUntil = getHideUntilDate(duration);
-    setInProgress((prev) => prev.filter((i) => i.key !== key));
+    setInProgress((prev) => prev.map((i) => i.key === key ? { ...i, hideUntil } : i));
     try {
       await api.launchpad.hideIssue(key, hideUntil);
     } catch {
@@ -186,22 +208,27 @@ export default function LaunchpadPage() {
     };
   }, [fetchAll]);
 
-  // R key = manual refresh
+  // Keyboard shortcuts: R = manual refresh, H = toggle hidden tickets
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
       if ((e.key === "r" || e.key === "R") && !selectedStoryKey) {
         fetchAll();
+      } else if (e.key === "h" || e.key === "H") {
+        setShowHidden((prev) => !prev);
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [fetchAll, selectedStoryKey]);
 
+  const hiddenCount = inProgress.filter(isHidden).length;
+  const visibleInProgress = showHidden ? inProgress : inProgress.filter((i) => !isHidden(i));
+
   // Group in-progress by status in display order, epics first within each group
   const grouped = IN_PROGRESS_STATUS_ORDER.map((status) => ({
     status,
-    items: inProgress
+    items: visibleInProgress
       .filter((i) => i.status === status)
       .sort((a, b) => (a.type === "Epic" ? -1 : b.type === "Epic" ? 1 : 0)),
   })).filter((g) => g.items.length > 0);
@@ -243,7 +270,16 @@ export default function LaunchpadPage() {
               <span className="text-blue-500">▶</span>
               In Progress
               <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-                {inProgress.length}
+                {visibleInProgress.length}
+              </span>
+              <span className="ml-auto flex items-center gap-3 text-[11px] text-gray-400">
+                {!showHidden && hiddenCount > 0 && (
+                  <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-yellow-700">{hiddenCount} hidden</span>
+                )}
+                {showHidden && (
+                  <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-yellow-700">Hidden shown</span>
+                )}
+                <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5">H</kbd> hidden</span>
               </span>
             </h3>
             {grouped.length === 0 ? (

@@ -59,6 +59,7 @@ export interface InProgressItem {
   size: string | null;
   prState: PrState | null;
   progress: { done: number; inProgress: number; total: number } | null;
+  hideUntil: string | null;
 }
 
 export async function setHideUntilDate(issueKey: string, date: string): Promise<void> {
@@ -140,7 +141,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
     maxResults: 200,
     fields: [
       "summary", "status", "issuetype", "assignee",
-      "customfield_11357", "customfield_11477", "customfield_10000", "customfield_10014", "parent", "subtasks",
+      "customfield_11357", "customfield_11477", "customfield_11465", "customfield_10000", "customfield_10014", "parent", "subtasks",
     ],
   });
 
@@ -331,6 +332,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
       milestone: (fields.customfield_11477 as { value: string } | null)?.value ?? null,
       prState: parsePrField(fields.customfield_10000 as string | null),
       progress,
+      hideUntil: (fields.customfield_11465 as string | null) ?? null,
     };
   });
 }

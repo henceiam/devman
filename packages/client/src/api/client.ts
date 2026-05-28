@@ -182,6 +182,7 @@ export interface InProgressItem {
   size: string | null;
   prState: PrState | null;
   progress: { done: number; inProgress: number; total: number } | null;
+  hideUntil: string | null;
 }
 
 export interface DiagnosticStep {
