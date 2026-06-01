@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { api, type InProgressItem } from "../api/client";
-import { statusBadge, getStatusStyle } from "./statusUtils";
+import { statusBadge, getStatusStyle, AGE_COLORS, ageInfo } from "./statusUtils";
 import PrStateIcon from "./PrStateIcon";
 import StoryDetailModal from "./StoryDetailModal";
-import JiraLink from "./JiraLink";
+import { jiraUrl } from "./JiraLink";
 
 const REFRESH_INTERVAL_MS =
   parseInt(import.meta.env.VITE_LAUNCHPAD_REFRESH_MS || "300000", 10);
@@ -21,9 +21,10 @@ function toLocalDateString(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-function getHideUntilDate(duration: "1w" | "1m"): string {
+function getHideUntilDate(duration: "1d" | "1w" | "1m"): string {
   const d = new Date();
-  if (duration === "1w") d.setDate(d.getDate() + 7);
+  if (duration === "1d") d.setDate(d.getDate() + 1);
+  else if (duration === "1w") d.setDate(d.getDate() + 7);
   else d.setMonth(d.getMonth() + 1);
   return toLocalDateString(d);
 }
@@ -45,7 +46,7 @@ function InProgressRow({
 }: {
   item: InProgressItem;
   onOpen: (key: string) => void;
-  onHide: (key: string, duration: "1w" | "1m") => void;
+  onHide: (key: string, duration: "1d" | "1w" | "1m" | "clear") => void;
 }) {
   const { bgColor } = getStatusStyle(item.status);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -69,15 +70,35 @@ function InProgressRow({
         className="flex flex-1 items-center gap-3 rounded-lg border border-gray-200 px-4 py-2.5 pr-9 text-left transition-shadow hover:shadow-md"
         style={{ backgroundColor: bgColor }}
       >
-        {/* Type badge */}
-        <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs font-medium ${item.type === "Epic" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
-          {item.type}
-        </span>
+        {/* Age dot */}
+        {(() => {
+          const { color, label } = ageInfo(item.latestActivity);
+          return (
+            <span
+              className="shrink-0 rounded-full"
+              style={{ width: 8, height: 8, backgroundColor: color }}
+              title={label}
+            />
+          );
+        })()}
 
-        {/* Key */}
-        <span className="w-36 shrink-0">
-          <JiraLink issueKey={item.key} />
-        </span>
+        {/* Issuetype icon — clickable to Jira, tooltip shows key */}
+        <a
+          href={jiraUrl(item.key)}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="shrink-0"
+          title={item.key}
+        >
+          {item.typeIconUrl ? (
+            <img src={item.typeIconUrl} alt={item.type} className="h-4 w-4" />
+          ) : (
+            <span className={`flex h-4 w-4 items-center justify-center rounded text-[9px] font-bold ${item.type === "Epic" ? "bg-purple-100 text-purple-700" : "bg-blue-100 text-blue-700"}`}>
+              {item.type[0]}
+            </span>
+          )}
+        </a>
 
         {/* Summary */}
         <span className="min-w-0 flex-1 truncate text-sm text-gray-800">{item.summary}</span>
@@ -129,7 +150,7 @@ function InProgressRow({
             <img src={item.avatarUrl} alt={item.assignee} className="h-6 w-6 rounded-full" title={item.assignee} />
           ) : (
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs text-gray-600" title={item.assignee}>
-              {item.assignee.slice(0, 2).toUpperCase()}
+              {item.assignee === "Unassigned" ? "?" : item.assignee.slice(0, 2).toUpperCase()}
             </div>
           )}
         </div>
@@ -147,6 +168,12 @@ function InProgressRow({
         {menuOpen && (
           <div className="absolute right-0 top-full mt-1 min-w-[160px] rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
             <button
+              onClick={() => { onHide(item.key, "1d"); setMenuOpen(false); }}
+              className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+            >
+              Hide for 1 day
+            </button>
+            <button
               onClick={() => { onHide(item.key, "1w"); setMenuOpen(false); }}
               className="block w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
             >
@@ -158,6 +185,17 @@ function InProgressRow({
             >
               Hide for 1 month
             </button>
+            {isHidden(item) && (
+              <>
+                <div className="my-1 border-t border-gray-100" />
+                <button
+                  onClick={() => { onHide(item.key, "clear"); setMenuOpen(false); }}
+                  className="block w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                >
+                  Clear — show again
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -189,9 +227,13 @@ export default function LaunchpadPage() {
     }
   }, []);
 
-  const handleHide = useCallback(async (key: string, duration: "1w" | "1m") => {
-    const hideUntil = getHideUntilDate(duration);
-    setInProgress((prev) => prev.map((i) => i.key === key ? { ...i, hideUntil } : i));
+  const handleHide = useCallback(async (key: string, duration: "1d" | "1w" | "1m" | "clear") => {
+    const hideUntil = duration === "clear" ? "" : getHideUntilDate(duration);
+    setInProgress((prev) =>
+      prev.map((i) =>
+        i.key === key ? { ...i, hideUntil: duration === "clear" ? null : hideUntil } : i,
+      ),
+    );
     try {
       await api.launchpad.hideIssue(key, hideUntil);
     } catch {

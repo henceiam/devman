@@ -1,15 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse, type CommentItem } from "../api/client";
-import { statusBadge } from "./statusUtils";
+import { statusBadge, ageInfo } from "./statusUtils";
 import PrStateIcon from "./PrStateIcon";
 import GitHubPrTab from "./GitHubPrTab";
 import JiraLink from "./JiraLink";
-
-const STATUS_DOT_COLORS: Record<string, string> = {
-  "new": "bg-gray-400",
-  "indeterminate": "bg-orange-400",
-  "done": "bg-green-500",
-};
 
 interface StoryDetailModalProps {
   storyKey: string;
@@ -141,7 +135,16 @@ function SubtaskKanban({ subtasks, hideDone, isEpic }: { subtasks: SubtaskItem[]
               {items.map((st) => (
                 <div key={st.key} className="rounded border border-gray-200 bg-white p-2 shadow-sm">
                   <div className="flex items-start gap-1.5">
-                    <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${STATUS_DOT_COLORS[st.statusCategory] ?? "bg-red-400"}`} />
+                    {(() => {
+  const { color, label } = ageInfo(st.latestActivity);
+  return (
+    <span
+      className="mt-1 h-2 w-2 shrink-0 rounded-full"
+      style={{ backgroundColor: color }}
+      title={label}
+    />
+  );
+})()}
                     <p className="min-w-0 flex-1 text-xs leading-snug text-gray-700">{st.summary}</p>
                     {st.assignee !== "Unassigned" && (
                       st.avatarUrl ? (

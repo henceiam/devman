@@ -51,6 +51,7 @@ export interface InProgressItem {
   key: string;
   summary: string;
   type: string;
+  typeIconUrl: string | null;
   status: string;
   statusCategory: string;
   assignee: string;
@@ -60,13 +61,14 @@ export interface InProgressItem {
   prState: PrState | null;
   progress: { done: number; inProgress: number; total: number } | null;
   hideUntil: string | null;
+  latestActivity: string | null;
 }
 
 export async function setHideUntilDate(issueKey: string, date: string): Promise<void> {
   const jira = getClient();
   await jira.issues.editIssue({
     issueIdOrKey: issueKey,
-    fields: { customfield_11465: date } as Record<string, unknown>,
+    fields: { customfield_11465: date || null } as Record<string, unknown>,
     notifyUsers: false,
   });
 }
@@ -142,6 +144,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
     fields: [
       "summary", "status", "issuetype", "assignee",
       "customfield_11357", "customfield_11477", "customfield_11465", "customfield_10000", "customfield_10014", "parent", "subtasks",
+      "updated",
     ],
   });
 
@@ -204,6 +207,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
   // Build story progress map for epics via a batch child-story query
   const epicKeyList = [...epicKeys];
   const epicProgressMap = new Map<string, { done: number; inProgress: number; total: number }>();
+  const epicLatestMap = new Map<string, string>();
   if (epicKeyList.length > 0) {
     const keyList = epicKeyList.join(", ");
     try {
@@ -212,12 +216,12 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
         jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
           jql: `parent in (${keyList})`,
           maxResults: 100,
-          fields: ["status", "parent"],
+          fields: ["status", "parent", "updated"],
         }).catch(() => null),
         jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
           jql: `"Epic Link" in (${keyList})`,
           maxResults: 100,
-          fields: ["status", "customfield_10014", "parent"],
+          fields: ["status", "customfield_10014", "parent", "updated"],
         }).catch(() => null),
       ]);
 
@@ -247,8 +251,8 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
       }
 
       const [parentIssues, epicLinkIssues] = await Promise.all([
-        fetchAllPages(`parent in (${keyList})`, ["status", "parent"], parentResult),
-        fetchAllPages(`"Epic Link" in (${keyList})`, ["status", "customfield_10014", "parent"], epicLinkResult),
+        fetchAllPages(`parent in (${keyList})`, ["status", "parent", "updated"], parentResult),
+        fetchAllPages(`"Epic Link" in (${keyList})`, ["status", "customfield_10014", "parent", "updated"], epicLinkResult),
       ]);
 
       // Merge and deduplicate by issue key
@@ -284,9 +288,66 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
           total: prev.total + 1,
         });
       }
+
+      // Latest activity per epic = max child updated
+      for (const child of childIssues) {
+        const cf = child.fields;
+        const epicLink = cf.customfield_10014;
+        const parentObj = cf.parent as { key?: string } | null;
+        const ownerKey =
+          (typeof epicLink === "string" ? epicLink : null) ??
+          (epicLink && typeof epicLink === "object" && "key" in epicLink ? (epicLink as { key: string }).key : null) ??
+          parentObj?.key ?? null;
+        if (!ownerKey || !epicKeys.has(ownerKey)) continue;
+        const updated = cf.updated as string | undefined;
+        if (updated) {
+          const current = epicLatestMap.get(ownerKey);
+          if (!current || updated > current) {
+            epicLatestMap.set(ownerKey, updated);
+          }
+        }
+      }
+
       console.log(`[launchpad] epic progress: ${epicKeyList.length} epics, ${childIssues.length} children total. Per-epic child counts:`, perEpic);
     } catch {
       // Progress unavailable — not critical
+    }
+  }
+
+  // ── Subtask latest-activity: batch-query subtask updated dates ──────────
+  const subtaskLatestMap = new Map<string, string>();
+  const subtaskKeys: string[] = [];
+  const parentBySubtaskKey = new Map<string, string>();
+  for (const issue of issues) {
+    if (issue.fields.issuetype?.name === "Epic") continue;
+    const rawSubtasks = (issue.fields.subtasks ?? []) as Array<{ key?: string }>;
+    if (rawSubtasks.length === 0) continue;
+    for (const st of rawSubtasks) {
+      if (st.key) {
+        subtaskKeys.push(st.key);
+        parentBySubtaskKey.set(st.key, issue.key!);
+      }
+    }
+  }
+  if (subtaskKeys.length > 0) {
+    try {
+      const subtaskResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+        jql: `issue in (${subtaskKeys.join(", ")})`,
+        maxResults: Math.min(subtaskKeys.length, 200),
+        fields: ["updated"],
+      });
+      for (const st of subtaskResult.issues ?? []) {
+        const parentKey = parentBySubtaskKey.get(st.key!);
+        if (!parentKey) continue;
+        const updated = (st.fields as Record<string, unknown>).updated as string | undefined;
+        if (!updated) continue;
+        const current = subtaskLatestMap.get(parentKey);
+        if (!current || updated > current) {
+          subtaskLatestMap.set(parentKey, updated);
+        }
+      }
+    } catch {
+      // Subtask dates not critical
     }
   }
 
@@ -320,10 +381,17 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
       }
     }
 
+    const ownUpdated = fields.updated as string | undefined ?? null;
+    const latestActivity =
+      issue.fields.issuetype?.name === "Epic"
+        ? epicLatestMap.get(issue.key!) ?? ownUpdated
+        : subtaskLatestMap.get(issue.key!) ?? ownUpdated;
+
     return {
       key: issue.key!,
       summary: issue.fields.summary,
       type: issue.fields.issuetype?.name ?? "Story",
+      typeIconUrl: issue.fields.issuetype?.iconUrl ?? null,
       status: issue.fields.status?.name ?? "Unknown",
       statusCategory: issue.fields.status?.statusCategory?.key ?? "new",
       assignee: assignee?.displayName ?? "Unassigned",
@@ -333,6 +401,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
       prState: parsePrField(fields.customfield_10000 as string | null),
       progress,
       hideUntil: (fields.customfield_11465 as string | null) ?? null,
+      latestActivity,
     };
   });
 }

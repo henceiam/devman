@@ -98,3 +98,27 @@ export function getStatusStyle(status: string): { dotColor: string; bgColor: str
   };
 }
 
+// ── Age helpers ──────────────────────────────────────────────────────────────
+
+export const AGE_COLORS: Record<string, string> = {
+  fresh:   "#22c55e",     // green-500:  < 1 day
+  warm:    "#eab308",     // yellow-500: 1-3 days
+  aging:   "#f97316",     // orange-500: 3-7 days
+  stale:   "#ef4444",     // red-500:    7+ days
+  unknown: "#d1d5db",     // gray-300:   no data
+};
+
+export function ageInfo(latestActivity: string | null): { color: string; label: string } {
+  if (!latestActivity) return { color: AGE_COLORS.unknown, label: "No activity data" };
+  const ms = Date.now() - new Date(latestActivity).getTime();
+  const hours = ms / 3_600_000;
+  if (hours < 1)    return { color: AGE_COLORS.fresh, label: "< 1h ago" };
+  if (hours < 24)   return { color: AGE_COLORS.fresh, label: `${Math.floor(hours)}h ago` };
+  const days = hours / 24;
+  if (days < 3)     return { color: AGE_COLORS.warm,  label: `${Math.floor(days)}d ago` };
+  if (days < 7)     return { color: AGE_COLORS.aging, label: `${Math.floor(days)}d ago` };
+  const weeks = Math.floor(days / 7);
+  if (weeks < 10)   return { color: AGE_COLORS.stale, label: `${weeks}w ago` };
+  return { color: AGE_COLORS.stale, label: `${Math.floor(days / 30)}mo ago` };
+}
+

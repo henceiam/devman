@@ -123,6 +123,7 @@ export interface SubtaskItem {
   assignee: string;
   avatarUrl: string | null;
   prState: PrState | null;
+  latestActivity: string | null;
 }
 
 export interface CommentItem {
@@ -174,6 +175,7 @@ export interface InProgressItem {
   key: string;
   summary: string;
   type: string;
+  typeIconUrl: string | null;
   status: string;
   statusCategory: string;
   assignee: string;
@@ -183,6 +185,7 @@ export interface InProgressItem {
   prState: PrState | null;
   progress: { done: number; inProgress: number; total: number } | null;
   hideUntil: string | null;
+  latestActivity: string | null;
 }
 
 export interface DiagnosticStep {

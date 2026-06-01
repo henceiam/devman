@@ -18,7 +18,7 @@ launchpadRouter.patch("/issues/:key/hide", async (req: Request<{ key: string }>,
   try {
     const { key } = req.params;
     const { hideUntil } = req.body as { hideUntil?: string };
-    if (!hideUntil) {
+    if (hideUntil === undefined || hideUntil === null) {
       res.status(400).json({ error: "Missing hideUntil date" });
       return;
     }

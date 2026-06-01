@@ -54,6 +54,7 @@ export interface MissionStory {
   type: string;
   subtaskProgress: { total: number; done: number; inProgress: number } | null;
   prState: PrState | null;
+  updated: string;
 }
 
 export interface MissionDetail {
@@ -69,6 +70,7 @@ export interface SubtaskItem {
   assignee: string;
   avatarUrl: string | null;
   prState: PrState | null;
+  latestActivity: string | null;
 }
 
 export interface CommentItem {
@@ -193,7 +195,7 @@ async function fetchStories(jqlParentClause: string): Promise<MissionStory[]> {
     fields: [
       "summary", "status", "assignee", "issuetype", "subtasks",
       "customfield_11357", "customfield_11477", "customfield_11302", "customfield_11487",
-      "customfield_10000",
+      "customfield_10000", "updated",
     ],
   });
 
@@ -232,6 +234,7 @@ async function fetchStories(jqlParentClause: string): Promise<MissionStory[]> {
       type: issue.fields.issuetype?.name ?? "Story",
       subtaskProgress,
       prState: parsePrField(fields.customfield_10000 as string | null),
+      updated: issue.fields.updated as string ?? "",
     };
   });
 }
@@ -354,6 +357,7 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
       assignee: s.assignee,
       avatarUrl: s.avatarUrl,
       prState: s.prState,
+      latestActivity: s.updated,
     }));
   } else {
     const subtasksRaw = (fields.subtasks ?? issue.fields.subtasks) as
@@ -365,7 +369,7 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
       const subtaskResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
         jql: `key IN (${keysJql}) ORDER BY rank ASC`,
         maxResults: subtaskKeys.length,
-        fields: ["summary", "status", "assignee", "customfield_10000"],
+        fields: ["summary", "status", "assignee", "customfield_10000", "updated"],
       });
       subtasks = (subtaskResult.issues ?? []).map((st) => {
         const assignee = st.fields.assignee as {
@@ -381,6 +385,7 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
           assignee: assignee?.displayName ?? "Unassigned",
           avatarUrl: assignee?.avatarUrls?.["32x32"] ?? null,
           prState: parsePrField(stFields.customfield_10000 as string | null),
+          latestActivity: st.fields.updated as string ?? null,
         };
       });
     }
