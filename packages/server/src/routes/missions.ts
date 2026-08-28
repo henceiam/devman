@@ -14,6 +14,29 @@ missionsRouter.get("/", async (_req: Request, res: Response) => {
   }
 });
 
+missionsRouter.get("/:key/milestone-summaries", async (req: Request<{ key: string }>, res: Response) => {
+  try {
+    const summaries = await missionService.getMilestoneSummaries(req.params.key);
+    res.json({ summaries });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Missions GET /${req.params.key}/milestone-summaries error:`, message);
+    res.status(500).json({ error: message });
+  }
+});
+
+missionsRouter.put("/:key/milestone-summaries/:milestoneName", async (req: Request<{ key: string; milestoneName: string }>, res: Response) => {
+  try {
+    const { summary } = req.body as { summary: string };
+    await missionService.setMilestoneSummary(req.params.key, req.params.milestoneName, summary);
+    res.status(204).end();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Missions PUT /${req.params.key}/milestone-summaries error:`, message);
+    res.status(500).json({ error: message });
+  }
+});
+
 missionsRouter.get("/:key", async (req: Request<{ key: string }>, res: Response) => {
   try {
     const { key } = req.params;
@@ -26,6 +49,23 @@ missionsRouter.get("/:key", async (req: Request<{ key: string }>, res: Response)
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error(`Missions /${req.params.key} error:`, message);
+    res.status(500).json({ error: message });
+  }
+});
+
+missionsRouter.patch("/:key/columns", async (req: Request<{ key: string }>, res: Response) => {
+  try {
+    const { key } = req.params;
+    const { columns } = req.body as { columns?: unknown };
+    if (!key || !Array.isArray(columns)) {
+      res.status(400).json({ error: "Missing key or columns array" });
+      return;
+    }
+    await missionService.updateEpicColumns(key, columns as string[]);
+    res.status(204).end();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Missions PATCH /${req.params.key}/columns error:`, message);
     res.status(500).json({ error: message });
   }
 });

@@ -55,6 +55,7 @@ export interface MissionStory {
   subtaskProgress: { total: number; done: number; inProgress: number } | null;
   prState: PrState | null;
   updated: string;
+  labels: string[];
 }
 
 export interface MissionDetail {
@@ -71,6 +72,7 @@ export interface SubtaskItem {
   avatarUrl: string | null;
   prState: PrState | null;
   latestActivity: string | null;
+  labels: string[];
 }
 
 export interface CommentItem {
@@ -189,17 +191,28 @@ export async function getMissionDetail(epicKey: string): Promise<MissionDetail> 
 
 async function fetchStories(jqlParentClause: string): Promise<MissionStory[]> {
   const jira = getClient();
-  const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
-    jql: `${jqlParentClause} ORDER BY rank ASC`,
-    maxResults: 200,
-    fields: [
-      "summary", "status", "assignee", "issuetype", "subtasks",
-      "customfield_11357", "customfield_11477", "customfield_11302", "customfield_11487",
-      "customfield_10000", "updated",
-    ],
-  });
+  const PAGE_SIZE = 100;
+  const allIssues: NonNullable<Awaited<ReturnType<typeof jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch>>["issues"]> = [];
+  let startAt = 0;
 
-  return (result.issues ?? []).map((issue) => {
+  while (true) {
+    const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+      jql: `${jqlParentClause} ORDER BY rank ASC`,
+      maxResults: PAGE_SIZE,
+      startAt,
+      fields: [
+        "summary", "status", "assignee", "issuetype", "subtasks",
+        "customfield_11357", "customfield_11477", "customfield_11302", "customfield_11487",
+        "customfield_10000", "updated", "labels",
+      ],
+    });
+    const page = result.issues ?? [];
+    allIssues.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    startAt += PAGE_SIZE;
+  }
+
+  return allIssues.map((issue) => {
     const fields = issue.fields as Record<string, unknown>;
     const assignee = issue.fields.assignee as {
       displayName?: string;
@@ -235,26 +248,81 @@ async function fetchStories(jqlParentClause: string): Promise<MissionStory[]> {
       subtaskProgress,
       prState: parsePrField(fields.customfield_10000 as string | null),
       updated: issue.fields.updated as string ?? "",
+      labels: (fields.labels as string[] | null) ?? [],
     };
   });
 }
 
-/** Parse the Epic's customfield_11487 Python-style dict into column list */
+/** Parse the Epic's customfield_11487 into column list.
+ * Supports two formats:
+ *   - Legacy Python-style dict: "{'category':{'Col1':1,'Col2':4,...}}"
+ *   - New CSV format: "Col1;Col2;Col3" (order is positional)
+ */
 function parseColumns(raw: string | null): StoryMapColumn[] {
   if (!raw) return [];
-  try {
-    // Format: "{'category':{'Col1':1,'Col2':4,...}}"
-    // Convert Python-style single quotes to JSON double quotes
-    const jsonStr = raw.replace(/'/g, '"');
-    const parsed = JSON.parse(jsonStr);
-    const categoryMap = parsed.category as Record<string, number> | undefined;
-    if (!categoryMap) return [];
-    return Object.entries(categoryMap)
-      .map(([name, order]) => ({ name, order }))
-      .sort((a, b) => a.order - b.order);
-  } catch {
-    return [];
+  // If the value contains '{', assume legacy JSON/Python-dict format
+  if (raw.includes("{")) {
+    try {
+      const jsonStr = raw.replace(/'/g, '"');
+      const parsed = JSON.parse(jsonStr);
+      const categoryMap = parsed.category as Record<string, number> | undefined;
+      if (!categoryMap) return [];
+      return Object.entries(categoryMap)
+        .map(([name, order]) => ({ name, order }))
+        .sort((a, b) => a.order - b.order);
+    } catch {
+      return [];
+    }
   }
+  // CSV format: split on semicolons, trim, filter empty
+  return raw
+    .split(";")
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0)
+    .map((name, index) => ({ name, order: index + 1 }));
+}
+
+export async function getMilestoneSummaries(epicKey: string): Promise<Record<string, string>> {
+  const jira = getClient();
+  try {
+    const result = await jira.issueProperties.getIssueProperty({
+      issueIdOrKey: epicKey,
+      propertyKey: "devman-milestone-summaries",
+    });
+    return (result.value as Record<string, string>) ?? {};
+  } catch (err: any) {
+    if (err?.status === 404 || err?.statusCode === 404) return {};
+    throw err;
+  }
+}
+
+export async function setMilestoneSummary(epicKey: string, milestoneName: string, summary: string): Promise<void> {
+  const summaries = await getMilestoneSummaries(epicKey);
+  if (summary === "") {
+    delete summaries[milestoneName];
+  } else {
+    summaries[milestoneName] = summary;
+  }
+  const jira = getClient();
+  await jira.issueProperties.setIssueProperty({
+    issueIdOrKey: epicKey,
+    propertyKey: "devman-milestone-summaries",
+    propertyValue: summaries,
+  });
+}
+
+export async function updateEpicColumns(epicKey: string, columns: string[]): Promise<void> {
+  const trimmed = columns.map((c) => c.trim()).filter((c) => c.length > 0);
+  const invalid = trimmed.filter((c) => c.includes(";"));
+  if (invalid.length > 0) {
+    throw new Error(`Category names cannot contain semicolons: ${invalid.join(", ")}`);
+  }
+  const jira = getClient();
+  await jira.issues.editIssue({
+    issueIdOrKey: epicKey,
+    fields: { customfield_11487: trimmed.join(";") },
+    notifyUsers: false,
+  });
 }
 
 /** Parse Jira's customfield_10000 (dev info) to extract PR state or branch presence */
@@ -358,6 +426,7 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
       avatarUrl: s.avatarUrl,
       prState: s.prState,
       latestActivity: s.updated,
+      labels: s.labels,
     }));
   } else {
     const subtasksRaw = (fields.subtasks ?? issue.fields.subtasks) as
@@ -369,7 +438,7 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
       const subtaskResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
         jql: `key IN (${keysJql}) ORDER BY rank ASC`,
         maxResults: subtaskKeys.length,
-        fields: ["summary", "status", "assignee", "customfield_10000", "updated"],
+        fields: ["summary", "status", "assignee", "customfield_10000", "updated", "labels"],
       });
       subtasks = (subtaskResult.issues ?? []).map((st) => {
         const assignee = st.fields.assignee as {
@@ -386,6 +455,7 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
           avatarUrl: assignee?.avatarUrls?.["32x32"] ?? null,
           prState: parsePrField(stFields.customfield_10000 as string | null),
           latestActivity: st.fields.updated as string ?? null,
+          labels: (stFields.labels as string[] | null) ?? [],
         };
       });
     }

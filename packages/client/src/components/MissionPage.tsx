@@ -1,9 +1,12 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router";
 import { api, type MissionSummary, type MissionStory, type MissionDetail } from "../api/client";
+import JiraLink from "./JiraLink";
 import MilestoneGroup from "./MilestoneGroup";
 import StoryMapGrid from "./StoryMapGrid";
 import StoryDetailModal from "./StoryDetailModal";
+import EditCategoriesModal from "./EditCategoriesModal";
+import EditMilestoneSummaryModal from "./EditMilestoneSummaryModal";
 import { statusBadge } from "./statusUtils";
 
 const COPY_STATUS_COLORS: Record<string, string> = {
@@ -34,9 +37,13 @@ export default function MissionPage() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "map">("list");
-  const [hideDone, setHideDone] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "map">("map");
+  const [hideDone, setHideDone] = useState(true);
   const [selectedStoryKey, setSelectedStoryKey] = useState<string | null>(null);
+  const [editingCategories, setEditingCategories] = useState(false);
+  const [headerExpanded, setHeaderExpanded] = useState(true);
+  const [milestoneSummaries, setMilestoneSummaries] = useState<Record<string, string>>({});
+  const [editingSummaryFor, setEditingSummaryFor] = useState<string | null>(null);
 
   useEffect(() => {
     api.missions
@@ -54,6 +61,10 @@ export default function MissionPage() {
       .then(setDetail)
       .catch((e) => setError(e.message))
       .finally(() => setDetailLoading(false));
+    api.missions
+      .getMilestoneSummaries(key)
+      .then((data) => setMilestoneSummaries(data.summaries))
+      .catch(() => setMilestoneSummaries({}));
   }, []);
 
   useEffect(() => {
@@ -131,24 +142,57 @@ export default function MissionPage() {
 
   return (
     <div className="mx-auto w-full px-6 py-6">
-      <div className="mb-6 flex items-center gap-4">
-        <label htmlFor="mission-select" className="text-sm font-medium text-gray-700">
-          Mission
-        </label>
-        <select
-          id="mission-select"
-          value={missionKey ?? ""}
-          onChange={handleSelect}
-          disabled={loading}
-          className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="">Select a mission…</option>
-          {missions.map((m) => (
-            <option key={m.key} value={m.key}>
-              {m.shortName || m.summary}
-            </option>
-          ))}
-        </select>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        {headerExpanded ? (
+          <div className="flex items-center gap-4">
+            <label htmlFor="mission-select" className="text-sm font-medium text-gray-700">
+              Mission
+            </label>
+            <select
+              id="mission-select"
+              value={missionKey ?? ""}
+              onChange={handleSelect}
+              disabled={loading}
+              className="rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="">Select a mission…</option>
+              {missions.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.shortName || m.summary}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            {detail ? (
+              <>
+                <JiraLink issueKey={detail.epic.key} />
+                <span className="text-sm font-medium text-gray-700">{detail.epic.summary}</span>
+              </>
+            ) : (
+              <span className="text-sm text-gray-400">No mission selected</span>
+            )}
+          </div>
+        )}
+        {(detail || !headerExpanded) && (
+          <button
+            onClick={() => setHeaderExpanded((prev) => !prev)}
+            aria-expanded={headerExpanded}
+            className="flex items-center text-gray-400 hover:text-gray-600"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className={`h-5 w-5 transition-transform ${headerExpanded ? "rotate-0" : "rotate-180"}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {error && (
@@ -161,11 +205,19 @@ export default function MissionPage() {
 
       {detail && !detailLoading && (
         <div className="space-y-6">
+          {headerExpanded && (
+            <>
           {/* Epic header */}
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3">
-              <span className="font-mono text-sm text-gray-400">{detail.epic.key}</span>
+              <JiraLink issueKey={detail.epic.key} />
               {statusBadge(detail.epic.status)}
+              <button
+                onClick={() => setEditingCategories(true)}
+                className="ml-auto text-xs text-gray-400 hover:text-gray-600"
+              >
+                Edit categories
+              </button>
             </div>
             <h2 className="mt-2 text-xl font-semibold text-gray-900">{detail.epic.summary}</h2>
             {detail.epic.shortName && (
@@ -228,6 +280,8 @@ export default function MissionPage() {
               </div>
             </div>
           </div>
+            </>
+          )}
 
           {/* View toggle + content */}
           <div className="flex items-center gap-4">
@@ -264,7 +318,7 @@ export default function MissionPage() {
           {viewMode === "list" ? (
             <div className="space-y-3">
               {milestoneGroups.map(([name, groupStories]) => (
-                <MilestoneGroup key={name} name={name} stories={groupStories} onStorySelect={setSelectedStoryKey} />
+                <MilestoneGroup key={name} name={name} stories={groupStories} onStorySelect={setSelectedStoryKey} summary={milestoneSummaries[name]} onEditSummary={() => setEditingSummaryFor(name)} />
               ))}
             </div>
           ) : (
@@ -282,6 +336,31 @@ export default function MissionPage() {
           storyKey={selectedStoryKey}
           hideDone={hideDone}
           onClose={() => setSelectedStoryKey(null)}
+        />
+      )}
+
+      {editingCategories && detail && (
+        <EditCategoriesModal
+          epicKey={detail.epic.key}
+          initialColumns={detail.epic.columns.map((c) => c.name)}
+          onSave={async (columns) => {
+            await api.missions.updateColumns(detail.epic.key, columns);
+            loadDetail(missionKey!);
+          }}
+          onClose={() => setEditingCategories(false)}
+        />
+      )}
+
+      {editingSummaryFor !== null && missionKey && (
+        <EditMilestoneSummaryModal
+          milestoneName={editingSummaryFor}
+          currentSummary={milestoneSummaries[editingSummaryFor] ?? ""}
+          onSave={async (summary) => {
+            await api.missions.setMilestoneSummary(missionKey, editingSummaryFor, summary);
+            const data = await api.missions.getMilestoneSummaries(missionKey);
+            setMilestoneSummaries(data.summaries);
+          }}
+          onClose={() => setEditingSummaryFor(null)}
         />
       )}
     </div>

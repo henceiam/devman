@@ -50,13 +50,28 @@ export interface GitHubPR {
   draft: boolean;
 }
 
-export interface MissionSummary {
-  key: string;
-  summary: string;
-  shortName: string;
-  status: string;
-  statusCategory: string;
-  columns: { name: string; order: number }[];
+export interface PullRequestContributor {
+  login: string;
+  avatarUrl: string | null;
+}
+
+export interface PullRequestWithReview {
+  id: number;
+  number: number;
+  title: string;
+  repo: string;
+  author: string;
+  authorAvatar: string | null;
+  createdAt: string;
+  updatedAt: string;
+  htmlUrl: string;
+  draft: boolean;
+  ageDays: number;
+  approved: boolean | null;
+  released: boolean | null;
+  releaseTag: string | null;
+  releaseIsDraft: boolean;
+  contributors: PullRequestContributor[];
 }
 
 export type PrState = "open" | "merged" | "declined" | "draft" | "unknown" | "branch";
@@ -94,6 +109,20 @@ export interface StoryGitHubResponse {
   hasBranch: boolean;
 }
 
+export interface StoryMapColumn {
+  name: string;
+  order: number;
+}
+
+export interface MissionSummary {
+  key: string;
+  summary: string;
+  shortName: string;
+  status: string;
+  statusCategory: string;
+  columns: StoryMapColumn[];
+}
+
 export interface MissionStory {
   key: string;
   summary: string;
@@ -108,6 +137,7 @@ export interface MissionStory {
   type: string;
   subtaskProgress: { total: number; done: number; inProgress: number } | null;
   prState: PrState | null;
+  labels: string[];
 }
 
 export interface MissionDetail {
@@ -124,6 +154,7 @@ export interface SubtaskItem {
   avatarUrl: string | null;
   prState: PrState | null;
   latestActivity: string | null;
+  labels: string[];
 }
 
 export interface CommentItem {
@@ -186,6 +217,7 @@ export interface InProgressItem {
   progress: { done: number; inProgress: number; total: number } | null;
   hideUntil: string | null;
   latestActivity: string | null;
+  labels: string[];
 }
 
 export interface DiagnosticStep {
@@ -212,6 +244,22 @@ export const api = {
       fetchJson<{ pulls: GitHubPR[] }>(
         `/github/pulls?owner=${encodeURIComponent(owner)}&repo=${encodeURIComponent(repo)}&state=${state}`,
       ),
+    getPullRequestsWithReviews: (params?: {
+      repo?: string;
+      author?: string;
+      state?: "open" | "closed" | "all";
+      sinceDays?: number;
+    }) => {
+      const query = new URLSearchParams();
+      if (params?.repo) query.set("repo", params.repo);
+      if (params?.author) query.set("author", params.author);
+      if (params?.state) query.set("state", params.state);
+      if (params?.sinceDays !== undefined) query.set("sinceDays", String(params.sinceDays));
+      const qs = query.toString();
+      return fetchJson<{ pulls: PullRequestWithReview[] }>(
+        `/github/pull-requests${qs ? `?${qs}` : ""}`,
+      );
+    },
   },
   missions: {
     list: () =>
@@ -236,6 +284,35 @@ export const api = {
       fetchJson<StoryGitHubResponse>(`/missions/stories/${encodeURIComponent(storyKey)}/github`),
     getStoryComments: (storyKey: string) =>
       fetchJson<{ comments: CommentItem[] }>(`/missions/stories/${encodeURIComponent(storyKey)}/comments`),
+    updateColumns: async (epicKey: string, columns: string[]): Promise<void> => {
+      const res = await fetch(`${API_BASE}/missions/${encodeURIComponent(epicKey)}/columns`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columns }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || `API error: ${res.status}`);
+      }
+    },
+    getMilestoneSummaries: (epicKey: string) =>
+      fetchJson<{ summaries: Record<string, string> }>(
+        `/missions/${encodeURIComponent(epicKey)}/milestone-summaries`
+      ),
+    setMilestoneSummary: async (epicKey: string, milestoneName: string, summary: string): Promise<void> => {
+      const res = await fetch(
+        `${API_BASE}/missions/${encodeURIComponent(epicKey)}/milestone-summaries/${encodeURIComponent(milestoneName)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ summary }),
+        }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error((body as { error?: string }).error ?? res.statusText);
+      }
+    },
   },
   launchpad: {
     getEscalated: () =>
@@ -244,6 +321,23 @@ export const api = {
       fetchJson<{ items: InProgressItem[] }>("/launchpad/in-progress"),
     hideIssue: async (key: string, hideUntil: string): Promise<void> => {
       const res = await fetch(`${API_BASE}/launchpad/issues/${encodeURIComponent(key)}/hide`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hideUntil }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error || `API error: ${res.status}`);
+      }
+    },
+  },
+  devils: {
+    getEscalated: () =>
+      fetchJson<{ tickets: EscalatedTicket[] }>("/devils/escalated"),
+    getInProgress: () =>
+      fetchJson<{ items: InProgressItem[] }>("/devils/in-progress"),
+    hideIssue: async (key: string, hideUntil: string): Promise<void> => {
+      const res = await fetch(`${API_BASE}/devils/issues/${encodeURIComponent(key)}/hide`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hideUntil }),
