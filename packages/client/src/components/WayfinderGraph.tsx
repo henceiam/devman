@@ -110,7 +110,7 @@ function Edges({ edges, width, height }: { edges: { from: LayoutNode; to: Layout
           <path d="M0,0 L6,3 L0,6 Z" fill="#94a3b8" />
         </marker>
       </defs>
-      {edges.map((e, i) => {
+      {edges.map((e) => {
         const x1 = e.from.x + NODE_W / 2;
         const y1 = e.from.y + NODE_H;
         const x2 = e.to.x + NODE_W / 2;
@@ -118,7 +118,7 @@ function Edges({ edges, width, height }: { edges: { from: LayoutNode; to: Layout
         const midY = (y1 + y2) / 2;
         return (
           <path
-            key={i}
+            key={`${e.from.ticket.key}->${e.to.ticket.key}`}
             d={`M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}`}
             fill="none"
             stroke="#cbd5e1"

@@ -523,8 +523,8 @@ export async function getStoryWayfinder(issueKey: string): Promise<WayfinderResp
   if (!issue) throw new Error(`Story not found: ${issueKey}`);
 
   const fields = issue.fields as Record<string, unknown>;
-  const subtasksRaw = (fields.subtasks ?? issue.fields.subtasks) as Array<{ key: string }> | undefined;
-  const subtaskKeys = (subtasksRaw ?? []).map((st) => st.key);
+  const subtasksRaw = (fields.subtasks ?? []) as Array<{ key: string }>;
+  const subtaskKeys = subtasksRaw.map((st) => st.key);
 
   if (subtaskKeys.length === 0) {
     return { storyKey: issueKey, tickets: [] };
