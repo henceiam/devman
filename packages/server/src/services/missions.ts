@@ -212,11 +212,13 @@ export async function getMissionDetail(epicKey: string): Promise<MissionDetail> 
 async function fetchStories(jqlParentClause: string): Promise<MissionStory[]> {
   const jira = getClient();
   const PAGE_SIZE = 100;
-  const allIssues: NonNullable<Awaited<ReturnType<typeof jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch>>["issues"]> = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const allIssues: any[] = [];
   let startAt = 0;
 
   while (true) {
-    const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = await (jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch as any)({
       jql: `${jqlParentClause} ORDER BY rank ASC`,
       maxResults: PAGE_SIZE,
       startAt,
