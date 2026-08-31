@@ -6,18 +6,18 @@
 
 **Status:** ready-for-agent
 
-- [ ] The Wayfinder tab defaults to the graph view, except when the Story has roughly 14 or more Wayfinder tickets, in which case it defaults to the list view instead. This is a default-selection heuristic only, evaluated before any layout/rendering happens — not a hard cutoff.
-- [ ] A visible toggle lets the user switch between graph and list views regardless of which one is shown first.
-- [ ] The graph is a pan-and-zoom canvas: drag to pan, +/− controls to zoom, nodes always render at full size (no auto-shrink-to-fit).
-- [ ] Layout is a top-to-bottom layered DAG: a ticket's layer is one more than the deepest layer among its blockers; unblocked roots sit at the top.
-- [ ] Arrows are drawn from each blocking ticket to what it blocks, with a short on-screen legend stating this direction convention once.
-- [ ] Each node prioritizes the ticket's summary as the dominant, multi-line-clamped text.
-- [ ] Type and frontier are shown as small icon-only badges on the node, with the full label available in a tooltip (not on-card text).
-- [ ] The Jira key is present on the node but visually demoted (small, muted, not a link, not a headline).
-- [ ] Status is shown as a colored dot, reusing the same status-color convention already used elsewhere in this modal.
-- [ ] Assignee is shown as a small avatar chip, consistent with how assignees render elsewhere in this modal.
-- [ ] Nothing in this ticket writes to Jira.
-- [ ] Manually verified against the real fixture Story (ticket 05) and against a denser synthetic dataset to confirm both the default-selection heuristic and pan/zoom legibility at higher ticket counts.
+- [x] The Wayfinder tab defaults to the graph view, except when the Story has roughly 14 or more Wayfinder tickets, in which case it defaults to the list view instead. This is a default-selection heuristic only, evaluated before any layout/rendering happens — not a hard cutoff.
+- [x] A visible toggle lets the user switch between graph and list views regardless of which one is shown first.
+- [x] The graph is a pan-and-zoom canvas: drag to pan, +/− controls to zoom, nodes always render at full size (no auto-shrink-to-fit).
+- [x] Layout is a top-to-bottom layered DAG: a ticket's layer is one more than the deepest layer among its blockers; unblocked roots sit at the top.
+- [x] Arrows are drawn from each blocking ticket to what it blocks, with a short on-screen legend stating this direction convention once.
+- [x] Each node prioritizes the ticket's summary as the dominant, multi-line-clamped text.
+- [x] Type and frontier are shown as small icon-only badges on the node, with the full label available in a tooltip (not on-card text).
+- [x] The Jira key is present on the node but visually demoted (small, muted, not a link, not a headline).
+- [x] Status is shown as a colored dot, reusing the same status-color convention already used elsewhere in this modal.
+- [x] Assignee is shown as a small avatar chip, consistent with how assignees render elsewhere in this modal.
+- [x] Nothing in this ticket writes to Jira.
+- [x] Manually verified against the real fixture Story (ticket 05) and against a denser synthetic (22-ticket) dataset to confirm both the default-selection heuristic (correctly defaulted to list at 22 tickets) and pan/zoom legibility (full graph readable as an overview at 40% zoom, individual nodes readable at 100%+, drag-to-pan confirmed working).
 
 ## Reference
 

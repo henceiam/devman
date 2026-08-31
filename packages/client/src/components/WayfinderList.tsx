@@ -1,35 +1,14 @@
-import { Search, FlaskConical, MessageSquare, ListChecks, Circle } from "lucide-react";
 import JiraLink from "./JiraLink";
 import { deriveState, type DerivedState } from "./wayfinderUtils";
+import { wayfinderTypeMeta, WayfinderAvatar } from "./wayfinderBadges";
 import type { WayfinderTicket, WayfinderTicketType } from "../api/client";
 
-const TYPE_META: Record<NonNullable<WayfinderTicketType>, { label: string; icon: React.ReactNode; color: string }> = {
-  research: { label: "Research", icon: <Search className="h-3 w-3" />, color: "bg-sky-100 text-sky-700" },
-  prototype: { label: "Prototype", icon: <FlaskConical className="h-3 w-3" />, color: "bg-violet-100 text-violet-700" },
-  grilling: { label: "Grilling", icon: <MessageSquare className="h-3 w-3" />, color: "bg-amber-100 text-amber-700" },
-  task: { label: "Task", icon: <ListChecks className="h-3 w-3" />, color: "bg-gray-200 text-gray-700" },
-};
-
 function TypeBadge({ type }: { type: WayfinderTicketType }) {
-  const meta = type
-    ? TYPE_META[type]
-    : { label: "Unknown", icon: <Circle className="h-3 w-3" />, color: "bg-gray-100 text-gray-500" };
+  const meta = wayfinderTypeMeta(type);
   return (
     <span className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${meta.color}`}>
       {meta.icon}
       {meta.label}
-    </span>
-  );
-}
-
-function Avatar({ name, avatarUrl }: { name: string; avatarUrl: string | null }) {
-  if (name === "Unassigned") return <span className="shrink-0 text-[10px] italic text-gray-400">Unassigned</span>;
-  if (avatarUrl) {
-    return <img src={avatarUrl} alt={name} title={name} className="h-5 w-5 shrink-0 rounded-full" />;
-  }
-  return (
-    <span title={name} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gray-200 text-[9px] font-medium text-gray-600">
-      {name.split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 2)}
     </span>
   );
 }
@@ -68,7 +47,7 @@ export default function WayfinderList({ tickets }: { tickets: WayfinderTicket[] 
                         ⛔ {t.blockedBy.length}
                       </span>
                     )}
-                    <Avatar name={t.assignee} avatarUrl={t.avatarUrl} />
+                    <WayfinderAvatar name={t.assignee} avatarUrl={t.avatarUrl} />
                   </div>
                 ))}
               </div>
