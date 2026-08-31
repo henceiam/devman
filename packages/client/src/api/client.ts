@@ -60,10 +60,13 @@ export interface PullRequestWithReview {
   number: number;
   title: string;
   repo: string;
+  jiraKey: string | null;
+  jiraSummary: string | null;
   author: string;
   authorAvatar: string | null;
   createdAt: string;
   updatedAt: string;
+  mergedAt: string | null;
   htmlUrl: string;
   draft: boolean;
   ageDays: number;

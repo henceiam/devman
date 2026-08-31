@@ -8,6 +8,8 @@ interface StoryMapGridProps {
   detail: MissionDetail;
   onStoryUpdated: () => void;
   onStorySelect?: (key: string) => void;
+  milestoneSummaries?: Record<string, string>;
+  onEditSummary?: (milestoneName: string) => void;
 }
 
 /** Encode milestone + column into a droppable ID */
@@ -42,7 +44,7 @@ function DroppableCell({ id, children }: { id: string; children: React.ReactNode
   );
 }
 
-export default function StoryMapGrid({ detail, onStoryUpdated, onStorySelect }: StoryMapGridProps) {
+export default function StoryMapGrid({ detail, onStoryUpdated, onStorySelect, milestoneSummaries, onEditSummary }: StoryMapGridProps) {
   const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set(["Out of scope"]));
   const [activeStory, setActiveStory] = useState<MissionStory | null>(null);
   const [localStories, setLocalStories] = useState<MissionStory[] | null>(null);
@@ -205,7 +207,23 @@ export default function StoryMapGrid({ detail, onStoryUpdated, onStorySelect }: 
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
                   </svg>
                   <div className="flex min-w-0 flex-col gap-1">
-                    <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">{ms}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-gray-700 whitespace-nowrap">{ms}</span>
+                      {ms !== "No milestone" && ms !== "Out of scope" && onEditSummary && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); onEditSummary(ms); }}
+                          className="rounded p-0.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          title="Edit summary"
+                        >
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H9v-2.414a2 2 0 01.586-1.414z" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                    {ms !== "No milestone" && ms !== "Out of scope" && milestoneSummaries?.[ms] && (
+                      <p className="text-[10px] italic text-gray-500 whitespace-normal leading-tight">{milestoneSummaries[ms]}</p>
+                    )}
                     {counts && counts.total > 0 && (
                       <div className="flex items-center gap-1.5">
                         <div className="flex h-1.5 w-14 shrink-0 overflow-hidden rounded-full bg-gray-100">

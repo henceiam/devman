@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { api, type InProgressItem } from "../api/client";
+import LabelIcons from "./LabelIcons";
 import { statusBadge, getStatusStyle, AGE_COLORS, ageInfo } from "./statusUtils";
 import PrStateIcon from "./PrStateIcon";
 import StoryDetailModal from "./StoryDetailModal";
@@ -8,7 +9,7 @@ import { jiraUrl } from "./JiraLink";
 const REFRESH_INTERVAL_MS =
   parseInt(import.meta.env.VITE_LAUNCHPAD_REFRESH_MS || "300000", 10);
 
-const IN_PROGRESS_STATUS_ORDER = ["In Progress", "Code review", "Ready for test"];
+const IN_PROGRESS_STATUS_ORDER = ["In Progress", "Code review", "Ready for test", "Ready for Test", "In Test"];
 
 function formatTime(dateStr: string): string {
   return new Date(dateStr).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -102,6 +103,9 @@ function InProgressRow({
 
         {/* Summary */}
         <span className="min-w-0 flex-1 truncate text-sm text-gray-800">{item.summary}</span>
+
+        {/* Label icons */}
+        <LabelIcons labels={item.labels} />
 
         {/* Milestone */}
         {item.milestone && (
@@ -205,7 +209,13 @@ function InProgressRow({
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
-export default function LaunchpadPage() {
+export default function LaunchpadPage({
+  teamName = "Radicals",
+  apiNamespace = "launchpad" as "launchpad" | "devils",
+}: {
+  teamName?: string;
+  apiNamespace?: "launchpad" | "devils";
+} = {}) {
   const [inProgress, setInProgress] = useState<InProgressItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -217,7 +227,7 @@ export default function LaunchpadPage() {
   const fetchAll = useCallback(async () => {
     setError(null);
     try {
-      const inp = await api.launchpad.getInProgress();
+      const inp = await api[apiNamespace].getInProgress();
       setInProgress(inp.items);
       setLastRefreshed(new Date());
     } catch (e) {
@@ -225,7 +235,7 @@ export default function LaunchpadPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiNamespace]);
 
   const handleHide = useCallback(async (key: string, duration: "1d" | "1w" | "1m" | "clear") => {
     const hideUntil = duration === "clear" ? "" : getHideUntilDate(duration);
@@ -235,11 +245,17 @@ export default function LaunchpadPage() {
       ),
     );
     try {
-      await api.launchpad.hideIssue(key, hideUntil);
+      await api[apiNamespace].hideIssue(key, hideUntil);
     } catch {
       fetchAll();
     }
   }, [fetchAll]);
+
+  useEffect(() => {
+    setInProgress([]);
+    setLoading(true);
+    setError(null);
+  }, [apiNamespace]);
 
   // Initial load + auto-refresh
   useEffect(() => {
@@ -279,7 +295,7 @@ export default function LaunchpadPage() {
     <main className="mx-auto max-w-6xl space-y-8 p-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-gray-900">Launchpad</h2>
+        <h2 className="text-xl font-bold text-gray-900">{teamName} Launchpad</h2>
         <div className="flex items-center gap-3">
           {lastRefreshed && (
             <span className="text-xs text-gray-400">

@@ -15,6 +15,7 @@ export function makeStory(overrides: Partial<MissionStory> = {}): MissionStory {
     type: "Story",
     subtaskProgress: null,
     prState: null,
+    labels: [],
     ...overrides,
   };
 }

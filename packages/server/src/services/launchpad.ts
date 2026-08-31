@@ -62,6 +62,7 @@ export interface InProgressItem {
   progress: { done: number; inProgress: number; total: number } | null;
   hideUntil: string | null;
   latestActivity: string | null;
+  labels: string[];
 }
 
 export async function setHideUntilDate(issueKey: string, date: string): Promise<void> {
@@ -73,11 +74,11 @@ export async function setHideUntilDate(issueKey: string, date: string): Promise<
   });
 }
 
-export async function getLaunchpadEscalated(): Promise<EscalatedTicket[]> {
+export async function getLaunchpadEscalated(team: string): Promise<EscalatedTicket[]> {
   const jira = getClient();
 
   const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
-    jql: `project = "EBBACKLOG" AND labels = "issue-escalated-succesfully" AND "Product teams[Checkboxes]" in (Radicals) AND statusCategory != Done AND issuetype = "Support" ORDER BY priority ASC, updated DESC`,
+    jql: `project = "EBBACKLOG" AND labels = "issue-escalated-succesfully" AND "Product teams[Checkboxes]" in (${team}) AND statusCategory != Done AND issuetype = "Support" ORDER BY priority ASC, updated DESC`,
     maxResults: 100,
     fields: [
       "summary", "status", "priority", "assignee",
@@ -135,21 +136,35 @@ export async function getLaunchpadEscalated(): Promise<EscalatedTicket[]> {
   });
 }
 
-export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
+export async function getLaunchpadInProgress(team: string): Promise<InProgressItem[]> {
   const jira = getClient();
 
   const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
-    jql: `project = "EBBACKLOG" AND issuetype not in (subTaskIssueTypes()) AND "Product teams[Checkboxes]" in (Radicals) AND status in ("In Progress", "Code review", "Ready for test", "In Test") ORDER BY status ASC, updated DESC`,
+    jql: `project = "EBBACKLOG" AND issuetype not in (subTaskIssueTypes()) AND "Product teams[Checkboxes]" in (${team}) AND status in ("In Progress", "Code review", "Ready for test", "In Test") ORDER BY status ASC, updated DESC`,
     maxResults: 200,
-    fields: [
-      "summary", "status", "issuetype", "assignee",
-      "customfield_11357", "customfield_11477", "customfield_11465", "customfield_10000", "customfield_10014", "parent", "subtasks",
-      "updated",
-    ],
+    fields: ["*all"],
   });
 
   const issues = result.issues ?? [];
-  console.log(`[launchpad] in-progress: Jira returned ${issues.length} issues`);
+  console.log(`[${team}] in-progress: Jira returned ${issues.length} issues`);
+  if (issues.length > 0) {
+    console.log(`[${team}] DIAG field keys on first issue:`, Object.keys(issues[0].fields as Record<string, unknown>).filter(k => k.startsWith("customfield_")).sort());
+    const allFields = issues[0].fields as Record<string, unknown>;
+    for (const [k, v] of Object.entries(allFields)) {
+      if (k.startsWith("customfield_") && v !== null && v !== undefined && !Array.isArray(v)) {
+        const str = JSON.stringify(v).slice(0, 120);
+        if (/radicals|devils|team/i.test(str)) {
+          console.log(`[${team}] DIAG possible teams field: ${k} =`, str);
+        }
+      }
+      if (k.startsWith("customfield_") && Array.isArray(v) && (v as unknown[]).length > 0) {
+        const str = JSON.stringify(v).slice(0, 120);
+        if (/radicals|devils|team/i.test(str)) {
+          console.log(`[${team}] DIAG possible teams field (array): ${k} =`, str);
+        }
+      }
+    }
+  }
   if (issues.length > 0) {
     const byType: Record<string, number> = {};
     const byStatus: Record<string, number> = {};
@@ -401,6 +416,7 @@ export async function getLaunchpadInProgress(): Promise<InProgressItem[]> {
       prState: parsePrField(fields.customfield_10000 as string | null),
       progress,
       hideUntil: (fields.customfield_11465 as string | null) ?? null,
+      labels: (fields.labels as string[] | null) ?? [],
       latestActivity,
     };
   });

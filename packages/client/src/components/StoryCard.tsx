@@ -2,6 +2,7 @@ import { useRef } from "react";
 import { useDraggable } from "@dnd-kit/core";
 import type { MissionStory } from "../api/client";
 import PrStateIcon from "./PrStateIcon";
+import LabelIcons from "./LabelIcons";
 import { getStatusStyle } from "./statusUtils";
 import JiraLink from "./JiraLink";
 
@@ -75,6 +76,8 @@ export default function StoryCard({ story, onSelect }: StoryCardProps) {
         <p className="min-w-0 flex-1 text-xs leading-snug text-gray-700 line-clamp-2">
           {story.summary}
         </p>
+
+        <LabelIcons labels={story.labels} />
 
         {/* Avatar */}
         {story.assignee !== "Unassigned" && (

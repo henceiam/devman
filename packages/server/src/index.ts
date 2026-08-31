@@ -4,7 +4,7 @@ import { config } from "./config.js";
 import { jiraRouter } from "./routes/jira.js";
 import { githubRouter } from "./routes/github.js";
 import { missionsRouter } from "./routes/missions.js";
-import { launchpadRouter } from "./routes/launchpad.js";
+import { launchpadRouter, devilsRouter } from "./routes/launchpad.js";
 
 const app = express();
 
@@ -19,6 +19,7 @@ app.use("/api/jira", jiraRouter);
 app.use("/api/github", githubRouter);
 app.use("/api/missions", missionsRouter);
 app.use("/api/launchpad", launchpadRouter);
+app.use("/api/devils", devilsRouter);
 
 app.listen(config.server.port, () => {
   console.log(`DevMan server listening on http://localhost:${config.server.port}`);

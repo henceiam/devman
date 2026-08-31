@@ -326,6 +326,8 @@ export default function MissionPage() {
               detail={{ ...detail, stories: visibleStories }}
               onStoryUpdated={() => loadDetail(missionKey!)}
               onStorySelect={setSelectedStoryKey}
+              milestoneSummaries={milestoneSummaries}
+              onEditSummary={(name) => setEditingSummaryFor(name)}
             />
           )}
         </div>

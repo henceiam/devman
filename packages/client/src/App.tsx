@@ -6,6 +6,10 @@ import MissionPage from "./components/MissionPage";
 import SupportPage from "./components/SupportPage";
 import LaunchpadPage from "./components/LaunchpadPage";
 import DiagnosticsPage from "./components/DiagnosticsPage";
+import PullRequestsLayout from "./components/PullRequestsLayout";
+import OpenPullRequestsPage from "./components/PullRequestsPage";
+import RecentlyClosedPullRequestsPage from "./components/RecentlyClosedPullRequestsPage";
+import UnreleasedPullRequestsPage from "./components/UnreleasedPullRequestsPage";
 
 function Dashboard() {
   return (
@@ -64,12 +68,28 @@ export default function App() {
                 Launchpad
               </NavLink>
               <NavLink
+                to="/devils"
+                className={({ isActive }) =>
+                  `text-sm font-medium ${isActive ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`
+                }
+              >
+                Devils
+              </NavLink>
+              <NavLink
                 to="/diagnostics"
                 className={({ isActive }) =>
                   `text-sm font-medium ${isActive ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`
                 }
               >
                 Diagnostics
+              </NavLink>
+              <NavLink
+                to="/pull-requests"
+                className={({ isActive }) =>
+                  `text-sm font-medium ${isActive ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`
+                }
+              >
+                Pull Requests
               </NavLink>
             </nav>
           </div>
@@ -80,7 +100,13 @@ export default function App() {
           <Route path="/missions/:missionKey?" element={<MissionPage />} />
           <Route path="/support" element={<SupportPage />} />
           <Route path="/launchpad" element={<LaunchpadPage />} />
+          <Route path="/devils" element={<LaunchpadPage teamName="Devils" apiNamespace="devils" />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
+          <Route path="/pull-requests" element={<PullRequestsLayout />}>
+            <Route index element={<OpenPullRequestsPage />} />
+            <Route path="recently-closed" element={<RecentlyClosedPullRequestsPage />} />
+            <Route path="unreleased" element={<UnreleasedPullRequestsPage />} />
+          </Route>
         </Routes>
       </div>
     </BrowserRouter>

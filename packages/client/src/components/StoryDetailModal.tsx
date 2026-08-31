@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse, type CommentItem } from "../api/client";
 import { statusBadge, ageInfo } from "./statusUtils";
 import PrStateIcon from "./PrStateIcon";
+import LabelIcons from "./LabelIcons";
 import GitHubPrTab from "./GitHubPrTab";
 import JiraLink from "./JiraLink";
 
@@ -146,6 +147,7 @@ function SubtaskKanban({ subtasks, hideDone, isEpic }: { subtasks: SubtaskItem[]
   );
 })()}
                     <p className="min-w-0 flex-1 text-xs leading-snug text-gray-700">{st.summary}</p>
+                    <LabelIcons labels={st.labels} />
                     {st.assignee !== "Unassigned" && (
                       st.avatarUrl ? (
                         <img src={st.avatarUrl} alt={st.assignee} title={st.assignee} className="h-5 w-5 shrink-0 rounded-full" />

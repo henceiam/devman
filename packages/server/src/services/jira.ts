@@ -34,6 +34,94 @@ export async function getProjects() {
   }));
 }
 
+export interface IssueGrouping {
+  groupKey: string;
+  groupSummary: string | null;
+  issueSummary: string | null;
+}
+
+export async function getIssueGroupingByKeys(issueKeys: string[]): Promise<Record<string, IssueGrouping>> {
+  const uniqueKeys = [...new Set(issueKeys.map((key) => key.toUpperCase()))];
+  if (uniqueKeys.length === 0) {
+    return {};
+  }
+
+  const jira = getClient();
+  const jqlKeys = uniqueKeys.map((key) => `"${key}"`).join(", ");
+  const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+    jql: `key in (${jqlKeys})`,
+    maxResults: uniqueKeys.length,
+    fields: ["summary", "parent", "issuetype"],
+  });
+
+  const groupings: Record<string, IssueGrouping> = {};
+  const missingParentSummaryKeys = new Set<string>();
+
+  for (const issue of result.issues ?? []) {
+    const issueKey = issue.key?.toUpperCase();
+    if (!issueKey) continue;
+
+    const summary = typeof issue.fields.summary === "string" && issue.fields.summary.length > 0
+      ? issue.fields.summary
+      : null;
+
+    const fields = issue.fields as Record<string, unknown>;
+    const issueType = fields.issuetype as { subtask?: boolean } | undefined;
+    const parent = fields.parent as { key?: string; fields?: { summary?: string } } | undefined;
+    const parentKey = parent?.key?.toUpperCase() ?? null;
+    const parentSummary = typeof parent?.fields?.summary === "string" && parent.fields.summary.length > 0
+      ? parent.fields.summary
+      : null;
+
+    if (issueType?.subtask === true && parentKey) {
+      groupings[issueKey] = {
+        groupKey: parentKey,
+        groupSummary: parentSummary,
+        issueSummary: summary,
+      };
+      if (!parentSummary) {
+        missingParentSummaryKeys.add(parentKey);
+      }
+      continue;
+    }
+
+    groupings[issueKey] = {
+      groupKey: issueKey,
+      groupSummary: summary,
+      issueSummary: summary,
+    };
+  }
+
+  if (missingParentSummaryKeys.size === 0) {
+    return groupings;
+  }
+
+  const parentKeys = [...missingParentSummaryKeys];
+  const parentJql = parentKeys.map((key) => `"${key}"`).join(", ");
+  const parentResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+    jql: `key in (${parentJql})`,
+    maxResults: parentKeys.length,
+    fields: ["summary"],
+  });
+
+  const parentSummaries: Record<string, string> = {};
+  for (const parentIssue of parentResult.issues ?? []) {
+    const key = parentIssue.key?.toUpperCase();
+    const summary = parentIssue.fields.summary;
+    if (key && typeof summary === "string" && summary.length > 0) {
+      parentSummaries[key] = summary;
+    }
+  }
+
+  for (const grouping of Object.values(groupings)) {
+    if (grouping.groupSummary === null && grouping.groupKey !== "") {
+      grouping.groupSummary = parentSummaries[grouping.groupKey] ?? grouping.issueSummary;
+    }
+  }
+
+  return groupings;
+}
+
 export interface DiagnosticStep {
   name: string;
   status: "pass" | "fail" | "skip";
