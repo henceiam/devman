@@ -3,3 +3,8 @@ dist/
 .env
 *.tsbuildinfo
 .vite/
+
+# Local agent tooling, not part of the app
+.opencode/
+.playwright-mcp/
+.sisyphus/
