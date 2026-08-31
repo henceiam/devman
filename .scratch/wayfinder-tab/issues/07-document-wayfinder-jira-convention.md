@@ -6,11 +6,11 @@
 
 **Status:** ready-for-agent
 
-- [ ] New section added covering: the `wayfinder:map` Story label (marks a Story as a Wayfinder map; its Subtasks are the map's tickets) and the `wayfinder:<research|prototype|grilling|task>` Subtask labels (each ticket's type).
-- [ ] Section documents that dependencies are native Jira `Blocks`/`is blocked by` issue links, records the confirmed link-type identity (id, name, inward/outward strings) verified live against this Jira instance, and notes that these strings are admin-editable per instance so the link-type id is the more robust thing to key on if this ever needs re-verifying.
-- [ ] Section documents the frontier/claimed/blocked/done derivation precedence exactly: Done (status category done) → Claimed (has an assignee) → Blocked (has at least one non-Done blocker) → Frontier (none of the above).
-- [ ] Section notes the intra-Story-only scope boundary: a dependency edge to an issue outside the current Story's own Subtask set is dropped, not surfaced.
-- [ ] No code changes in this ticket — documentation only.
+- [x] New section added covering: the `wayfinder:map` Story label (marks a Story as a Wayfinder map; its Subtasks are the map's tickets) and the `wayfinder:<research|prototype|grilling|task>` Subtask labels (each ticket's type).
+- [x] Section documents that dependencies are native Jira `Blocks`/`is blocked by` issue links, records the confirmed link-type identity (id, name, inward/outward strings) verified live against this Jira instance, and notes that these strings are admin-editable per instance so the link-type id is the more robust thing to key on if this ever needs re-verifying.
+- [x] Section documents the frontier/claimed/blocked/done derivation precedence exactly: Done (status category done) → Claimed (has an assignee) → Blocked (has at least one non-Done blocker) → Frontier (none of the above).
+- [x] Section notes the intra-Story-only scope boundary: a dependency edge to an issue outside the current Story's own Subtask set is dropped, not surfaced.
+- [x] No code changes in this ticket — documentation only.
 
 ## Reference
 

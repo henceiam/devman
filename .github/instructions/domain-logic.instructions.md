@@ -97,6 +97,26 @@ XS, S, M, L, XL
 
 ---
 
+## Wayfinder Maps
+
+The user tracks some work as **Wayfinder maps** — a dependency-ordered plan of tickets, distinct from any Jira mechanism built for this purpose. This is a labeling + native-issue-link convention layered on top of ordinary Stories and Subtasks:
+
+- **`wayfinder:map`** — a Story label. Marks that Story as a Wayfinder map; its **Subtasks are the map's tickets**.
+- **`wayfinder:<research|prototype|grilling|task>`** — a Subtask label, one per Subtask, giving that ticket's type. Mirrors the `/wayfinder` skill's own ticket typing, defined purely by label (no other Jira field carries it).
+
+**Dependencies** between Wayfinder tickets are Jira's **native** `Blocks`/`is blocked by` issue links — not a custom field or naming convention. Confirmed live against this Jira instance (via `getIssueLinkTypes`/`getJiraIssue`): the link type is `id: "10000"`, `name: "Blocks"`, `inward: "is blocked by"`, `outward: "blocks"`. Each `issuelinks` entry carries either an `inwardIssue` or `outwardIssue` (never both) — same shape already parsed for SUPPORT ticket links (see Jira API Notes below). Link-type `name`/`inward`/`outward` strings are admin-editable per Jira instance, so if this ever needs re-verifying, key on the link-type **id** (`10000`), which is the more robust identifier.
+
+**Derived state** (Frontier/Claimed/Blocked/Done) is never tracked explicitly in Jira — it's computed from status, assignee, and blocker state, in this precedence order:
+
+1. **Done** — the ticket's own status category is Done.
+2. **Claimed** — not Done, and it has an assignee.
+3. **Blocked** — not Done, not Claimed, and at least one of its blockers is not itself Done.
+4. **Frontier** — none of the above (open, unassigned, every blocker Done — including having no blockers at all).
+
+**Scope boundary**: dependency edges are resolved **within a single Story's own Subtask set only**. A `Blocks`/`is blocked by` link to an issue outside that set (e.g. a Subtask of a different Story) is dropped entirely, not surfaced as a dangling or external reference.
+
+---
+
 ## PR State Detection (`customfield_10000`)
 
 The raw string in `customfield_10000` encodes Jira's dev info. Parse rules (in priority order):
