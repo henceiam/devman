@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { api, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse, type CommentItem } from "../api/client";
+import { api, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse, type WayfinderResponse, type CommentItem } from "../api/client";
 import { statusBadge, ageInfo } from "./statusUtils";
 import PrStateIcon from "./PrStateIcon";
 import LabelIcons from "./LabelIcons";
 import GitHubPrTab from "./GitHubPrTab";
+import WayfinderTab from "./WayfinderTab";
 import JiraLink from "./JiraLink";
 
 interface StoryDetailModalProps {
@@ -182,10 +183,13 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
   const [detail, setDetail] = useState<StoryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"subtasks" | "details" | "plan" | "github" | "comments">("subtasks");
+  const [activeTab, setActiveTab] = useState<"subtasks" | "details" | "plan" | "github" | "wayfinder" | "comments">("subtasks");
   const [githubData, setGithubData] = useState<StoryGitHubResponse | null>(null);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
+  const [wayfinderData, setWayfinderData] = useState<WayfinderResponse | null>(null);
+  const [wayfinderLoading, setWayfinderLoading] = useState(false);
+  const [wayfinderError, setWayfinderError] = useState<string | null>(null);
   const [comments, setComments] = useState<CommentItem[] | null>(null);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsError, setCommentsError] = useState<string | null>(null);
@@ -195,6 +199,8 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
     setError(null);
     setGithubData(null);
     setGithubError(null);
+    setWayfinderData(null);
+    setWayfinderError(null);
     setComments(null);
     setCommentsError(null);
     api.missions
@@ -224,6 +230,19 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
         .then(setGithubData)
         .catch((e) => setGithubError(e.message))
         .finally(() => setGithubLoading(false));
+    }
+  };
+
+  const handleWayfinderTab = () => {
+    setActiveTab("wayfinder");
+    if (!wayfinderData && !wayfinderLoading) {
+      setWayfinderLoading(true);
+      setWayfinderError(null);
+      api.missions
+        .getStoryWayfinder(storyKey)
+        .then(setWayfinderData)
+        .catch((e) => setWayfinderError(e.message))
+        .finally(() => setWayfinderLoading(false));
     }
   };
 
@@ -309,6 +328,18 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
                 GitHub
               </button>
             )}
+            {detail.labels.includes("wayfinder:map") && (
+              <button
+                onClick={handleWayfinderTab}
+                className={`border-b-2 px-3 py-2 text-xs font-medium transition ${
+                  activeTab === "wayfinder"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Wayfinder
+              </button>
+            )}
             <button
               onClick={() => setActiveTab("comments")}
               className={`border-b-2 px-3 py-2 text-xs font-medium transition ${
@@ -390,6 +421,16 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
               <p className="text-sm text-red-600">GitHub error: {githubError}</p>
             ) : githubData ? (
               <GitHubPrTab data={githubData} />
+            ) : null
+          )}
+
+          {activeTab === "wayfinder" && (
+            wayfinderLoading ? (
+              <p className="text-sm text-gray-500">Loading Wayfinder data…</p>
+            ) : wayfinderError ? (
+              <p className="text-sm text-red-600">Wayfinder error: {wayfinderError}</p>
+            ) : wayfinderData ? (
+              <WayfinderTab tickets={wayfinderData.tickets} />
             ) : null
           )}
         </div>

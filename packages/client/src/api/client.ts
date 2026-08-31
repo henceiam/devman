@@ -112,6 +112,25 @@ export interface StoryGitHubResponse {
   hasBranch: boolean;
 }
 
+export type WayfinderTicketType = "research" | "prototype" | "grilling" | "task" | null;
+
+export interface WayfinderTicket {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  assignee: string;
+  avatarUrl: string | null;
+  type: WayfinderTicketType;
+  blockedBy: string[];
+  blocks: string[];
+}
+
+export interface WayfinderResponse {
+  storyKey: string;
+  tickets: WayfinderTicket[];
+}
+
 export interface StoryMapColumn {
   name: string;
   order: number;
@@ -180,6 +199,7 @@ export interface StoryDetailResponse {
   implementationPlan: unknown | null;
   subtasks: SubtaskItem[];
   prState: PrState | null;
+  labels: string[];
 }
 
 export interface LinkedSupportTicket {
@@ -285,6 +305,8 @@ export const api = {
       fetchJson<StoryDetailResponse>(`/missions/stories/${encodeURIComponent(storyKey)}`),
     getStoryGithub: (storyKey: string) =>
       fetchJson<StoryGitHubResponse>(`/missions/stories/${encodeURIComponent(storyKey)}/github`),
+    getStoryWayfinder: (storyKey: string) =>
+      fetchJson<WayfinderResponse>(`/missions/stories/${encodeURIComponent(storyKey)}/wayfinder`),
     getStoryComments: (storyKey: string) =>
       fetchJson<{ comments: CommentItem[] }>(`/missions/stories/${encodeURIComponent(storyKey)}/comments`),
     updateColumns: async (epicKey: string, columns: string[]): Promise<void> => {

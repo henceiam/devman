@@ -95,6 +95,26 @@ export interface StoryDetailResponse {
   implementationPlan: unknown | null;
   subtasks: SubtaskItem[];
   prState: PrState | null;
+  labels: string[];
+}
+
+export type WayfinderTicketType = "research" | "prototype" | "grilling" | "task" | null;
+
+export interface WayfinderTicket {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: string;
+  assignee: string;
+  avatarUrl: string | null;
+  type: WayfinderTicketType;
+  blockedBy: string[];
+  blocks: string[];
+}
+
+export interface WayfinderResponse {
+  storyKey: string;
+  tickets: WayfinderTicket[];
 }
 
 export interface PrReviewer {
@@ -398,7 +418,7 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
   const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
     jql: `key = "${issueKey}"`,
     maxResults: 1,
-    fields: ["summary", "status", "issuetype", "description", "subtasks", "customfield_11101", "customfield_10000", "customfield_11461"],
+    fields: ["summary", "status", "issuetype", "description", "subtasks", "customfield_11101", "customfield_10000", "customfield_11461", "labels"],
   });
 
   const issue = result.issues?.[0];
@@ -472,7 +492,91 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
     implementationPlan: (fields.customfield_11461 as unknown) ?? null,
     subtasks,
     prState: parsePrField(fields.customfield_10000 as string | null),
+    labels: (fields.labels as string[] | null) ?? [],
   };
+}
+
+// "Blocks" link type is admin-editable per Jira instance; this id was confirmed live
+// against the real instance (GET /rest/api/3/issueLinkType) rather than assumed.
+const WAYFINDER_BLOCKS_LINK_TYPE_ID = "10000";
+const WAYFINDER_TICKET_TYPES = ["research", "prototype", "grilling", "task"] as const;
+
+function parseWayfinderTicketType(labels: string[]): WayfinderTicketType {
+  for (const type of WAYFINDER_TICKET_TYPES) {
+    if (labels.includes(`wayfinder:${type}`)) return type;
+  }
+  return null;
+}
+
+/** Fetch a Story's Subtasks as Wayfinder tickets: type, status, assignee, and intra-Story dependency edges. */
+export async function getStoryWayfinder(issueKey: string): Promise<WayfinderResponse> {
+  const jira = getClient();
+  const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+    jql: `key = "${issueKey}"`,
+    maxResults: 1,
+    fields: ["subtasks"],
+  });
+
+  const issue = result.issues?.[0];
+  if (!issue) throw new Error(`Story not found: ${issueKey}`);
+
+  const fields = issue.fields as Record<string, unknown>;
+  const subtasksRaw = (fields.subtasks ?? issue.fields.subtasks) as Array<{ key: string }> | undefined;
+  const subtaskKeys = (subtasksRaw ?? []).map((st) => st.key);
+
+  if (subtaskKeys.length === 0) {
+    return { storyKey: issueKey, tickets: [] };
+  }
+
+  const subtaskKeySet = new Set(subtaskKeys);
+  const keysJql = subtaskKeys.map((k) => `"${k}"`).join(", ");
+  const subtaskResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+    jql: `key IN (${keysJql}) ORDER BY rank ASC`,
+    maxResults: subtaskKeys.length,
+    fields: ["summary", "status", "assignee", "labels", "issuelinks"],
+  });
+
+  const tickets: WayfinderTicket[] = (subtaskResult.issues ?? []).map((st) => {
+    const assignee = st.fields.assignee as {
+      displayName?: string;
+      avatarUrls?: Record<string, string>;
+    } | null;
+    const stFields = st.fields as Record<string, unknown>;
+    const labels = (stFields.labels as string[] | null) ?? [];
+
+    const issueLinks = (stFields.issuelinks ?? []) as Array<{
+      type: { id?: string; name?: string };
+      inwardIssue?: { key: string };
+      outwardIssue?: { key: string };
+    }>;
+
+    const blockedBy: string[] = [];
+    const blocks: string[] = [];
+    for (const link of issueLinks) {
+      const isBlocksLink = link.type?.id === WAYFINDER_BLOCKS_LINK_TYPE_ID || link.type?.name === "Blocks";
+      if (!isBlocksLink) continue;
+      if (link.inwardIssue && subtaskKeySet.has(link.inwardIssue.key)) {
+        blockedBy.push(link.inwardIssue.key);
+      }
+      if (link.outwardIssue && subtaskKeySet.has(link.outwardIssue.key)) {
+        blocks.push(link.outwardIssue.key);
+      }
+    }
+
+    return {
+      key: st.key!,
+      summary: st.fields.summary,
+      status: st.fields.status?.name ?? "Unknown",
+      statusCategory: st.fields.status?.statusCategory?.key ?? "new",
+      assignee: assignee?.displayName ?? "Unassigned",
+      avatarUrl: assignee?.avatarUrls?.["32x32"] ?? null,
+      type: parseWayfinderTicketType(labels),
+      blockedBy,
+      blocks,
+    };
+  });
+
+  return { storyKey: issueKey, tickets };
 }
 
 /** Fetch comments for a story or epic */
