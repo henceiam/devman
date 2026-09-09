@@ -98,7 +98,11 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMo
         }
       } catch {
         if (isCurrentGeneration()) {
-          dispatchMove({ type: "refresh-failure", error: "Story moved, but Mission data could not be refreshed." });
+          dispatchMove({
+            type: "refresh-failure",
+            storyKey,
+            error: "Story moved, but Mission data could not be refreshed.",
+          });
         }
       }
     } catch (error) {

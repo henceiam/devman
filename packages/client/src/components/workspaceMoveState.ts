@@ -14,7 +14,7 @@ export type WorkspaceMoveAction =
   | { type: "start"; storyKey: string; milestone: string | null; category: string | null }
   | { type: "rollback"; story: MissionStory; error: string }
   | { type: "refresh-success"; storyKey: string; stories: MissionStory[] }
-  | { type: "refresh-failure"; error: string }
+  | { type: "refresh-failure"; storyKey: string; error: string }
   | { type: "finish"; storyKey: string };
 
 export function workspaceMoveReducer(state: WorkspaceMoveState, action: WorkspaceMoveAction): WorkspaceMoveState {
@@ -54,8 +54,16 @@ export function workspaceMoveReducer(state: WorkspaceMoveState, action: Workspac
         queuedStories: action.stories,
       };
     }
-    case "refresh-failure":
-      return { ...state, error: action.error };
+    case "refresh-failure": {
+      const confirmedStory = state.stories.find((story) => story.key === action.storyKey);
+      return {
+        ...state,
+        queuedStories: state.queuedStories && confirmedStory
+          ? state.queuedStories.map((story) => story.key === action.storyKey ? confirmedStory : story)
+          : state.queuedStories,
+        error: action.error,
+      };
+    }
     case "finish": {
       const pendingStoryKeys = new Set(state.pendingStoryKeys);
       pendingStoryKeys.delete(action.storyKey);

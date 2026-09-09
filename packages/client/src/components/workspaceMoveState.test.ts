@@ -60,6 +60,7 @@ describe("workspaceMoveReducer", () => {
     });
     const refreshFailed = workspaceMoveReducer(moved, {
       type: "refresh-failure",
+      storyKey: "STORY-1",
       error: "Refresh failed",
     });
     expect(refreshFailed.stories[0].milestone).toBe("Milestone 2");
@@ -73,6 +74,51 @@ describe("workspaceMoveReducer", () => {
     });
     expect(refreshed.stories[0].milestone).toBe("Milestone 2");
     expect(workspaceMoveReducer(refreshed, { type: "finish", storyKey: "STORY-1" }).stories).toEqual(serverStories);
+  });
+
+  it("rebases an older queued snapshot when a later confirmed move cannot refresh", () => {
+    const initial = {
+      ...state(),
+      stories: [
+        makeStory({ key: "STORY-A", milestone: "Milestone 1" }),
+        makeStory({ key: "STORY-B", milestone: "Milestone 1" }),
+      ],
+    };
+    const movingA = workspaceMoveReducer(initial, {
+      type: "start",
+      storyKey: "STORY-A",
+      milestone: "Milestone 2",
+      category: "Feature",
+    });
+    const movingBoth = workspaceMoveReducer(movingA, {
+      type: "start",
+      storyKey: "STORY-B",
+      milestone: "Milestone 2",
+      category: "Feature",
+    });
+    const canonicalBeforeB = [
+      makeStory({ key: "STORY-A", milestone: "Milestone 2", category: "Feature" }),
+      makeStory({ key: "STORY-B", milestone: "Milestone 1" }),
+    ];
+    const refreshedA = workspaceMoveReducer(movingBoth, {
+      type: "refresh-success",
+      storyKey: "STORY-A",
+      stories: canonicalBeforeB,
+    });
+    const finishedA = workspaceMoveReducer(refreshedA, { type: "finish", storyKey: "STORY-A" });
+    const failedBRefresh = workspaceMoveReducer(finishedA, {
+      type: "refresh-failure",
+      storyKey: "STORY-B",
+      error: "Refresh failed",
+    });
+    const finishedB = workspaceMoveReducer(failedBRefresh, { type: "finish", storyKey: "STORY-B" });
+
+    expect(finishedB.stories.map(({ key, milestone }) => ({ key, milestone }))).toEqual([
+      { key: "STORY-A", milestone: "Milestone 2" },
+      { key: "STORY-B", milestone: "Milestone 2" },
+    ]);
+    expect(finishedB.error).toBe("Refresh failed");
+    expect(finishedB.queuedStories).toBeNull();
   });
 
   it("applies the latest queued canonical stories after all concurrent moves finish", () => {

@@ -345,6 +345,58 @@ describe("Mission Focus mode", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("retains a later confirmed move when an earlier move snapshot queued before its failed refresh", async () => {
+    const initialMission = mission("MISSION-A");
+    initialMission.stories = [
+      makeStory({ key: "STORY-A", summary: "Story A", milestone: "Milestone 1" }),
+      makeStory({ key: "STORY-B", summary: "Story B", milestone: "Milestone 1" }),
+    ];
+    vi.mocked(api.missions.getDetail).mockResolvedValue(initialMission);
+    const persistenceA = deferred<void>();
+    const persistenceB = deferred<void>();
+    const refreshA = deferred<MissionDetail>();
+    const refreshB = deferred<MissionDetail>();
+    vi.spyOn(api.missions, "updateStory").mockImplementation((storyKey) => (
+      storyKey === "STORY-A" ? persistenceA.promise : persistenceB.promise
+    ));
+    renderMission();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Enter Focus mode" })).toBeEnabled());
+    const initialDetailRequests = vi.mocked(api.missions.getDetail).mock.calls.length;
+    vi.mocked(api.missions.getDetail)
+      .mockReturnValueOnce(refreshA.promise)
+      .mockReturnValueOnce(refreshB.promise);
+
+    for (const story of initialMission.stories) {
+      act(() => missionDragHandlers.start?.({ active: { id: story.key, data: { current: { story } } } } as unknown as DragStartEvent));
+      act(() => {
+        void missionDragHandlers.end?.({
+          active: { id: story.key },
+          over: { data: { current: { milestone: "Milestone 2", column: "Feature" } } },
+        } as unknown as DragEndEvent);
+      });
+    }
+
+    await act(async () => persistenceA.resolve());
+    await waitFor(() => expect(api.missions.getDetail).toHaveBeenCalledTimes(initialDetailRequests + 1));
+    const canonicalBeforeB = mission("MISSION-A");
+    canonicalBeforeB.stories = [
+      makeStory({ key: "STORY-A", summary: "Story A", milestone: "Milestone 2", category: "Feature" }),
+      makeStory({ key: "STORY-B", summary: "Story B", milestone: "Milestone 1" }),
+    ];
+    await act(async () => refreshA.resolve(canonicalBeforeB));
+
+    await act(async () => persistenceB.resolve());
+    await waitFor(() => expect(api.missions.getDetail).toHaveBeenCalledTimes(initialDetailRequests + 2));
+    await act(async () => refreshB.reject(new Error("Refresh failed")));
+
+    expect(screen.getByText("Story A")).toBeInTheDocument();
+    expect(screen.getByText("Story B")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Milestone 2" })).toHaveLength(1);
+    expect(screen.getByText("0/2")).toBeInTheDocument();
+    expect(screen.queryByText("0/1")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Story moved, but Mission data could not be refreshed.");
+  });
+
   it("does not let a move from an unmounted workspace supersede the selected Mission load", async () => {
     const persistence = deferred<void>();
     const missionBRequest = deferred<MissionDetail>();
@@ -435,6 +487,31 @@ describe("Mission Focus mode", () => {
     await act(async () => missionBRequest.resolve(mission("MISSION-B")));
     expect(await screen.findByText("MISSION-B short")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Exit Focus mode" })).toBeInTheDocument();
+  });
+
+  it("commits replacement detail without waiting for its milestone descriptions", async () => {
+    const missionBRequest = deferred<MissionDetail>();
+    const missionBSummaries = deferred<{ summaries: Record<string, string> }>();
+    vi.mocked(api.missions.getDetail).mockImplementation((key) => key === "MISSION-B"
+      ? missionBRequest.promise
+      : Promise.resolve(mission(key)));
+    vi.mocked(api.missions.getMilestoneSummaries).mockImplementation((key) => key === "MISSION-B"
+      ? missionBSummaries.promise
+      : Promise.resolve({ summaries: { "Milestone 1": "Ship the core workflow" } }));
+    const router = renderMission();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Enter Focus mode" })).toBeEnabled());
+
+    await act(async () => router.navigate("/missions/MISSION-B"));
+    expect(screen.getByText("Loading mission details…")).toBeInTheDocument();
+    await act(async () => missionBRequest.resolve(mission("MISSION-B")));
+
+    expect(screen.getByRole("heading", { name: "MISSION-B full summary" })).toBeInTheDocument();
+    expect(screen.queryByText("Loading mission details…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enter Focus mode" })).toBeEnabled();
+    expect(screen.queryByText("B description arrived")).not.toBeInTheDocument();
+
+    await act(async () => missionBSummaries.resolve({ summaries: { "Milestone 1": "B description arrived" } }));
+    expect(screen.getByText("B description arrived")).toBeInTheDocument();
   });
 
   it("keeps Focus available when replacement loading fails but valid detail remains", async () => {

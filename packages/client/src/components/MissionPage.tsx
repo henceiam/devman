@@ -135,21 +135,27 @@ export default function MissionPage() {
     const request = startDetailRequest(key);
     setDetailLoading(true);
     setError(null);
-    const [detailResult, summariesResult] = await Promise.allSettled([
-      request.response,
-      api.missions.getMilestoneSummaries(key),
-    ]);
-    if (request.id !== detailRequestId.current) return;
+    setMilestoneSummaries({});
+    void api.missions.getMilestoneSummaries(key).then(
+      (result) => {
+        if (request.id === detailRequestId.current) setMilestoneSummaries(result.summaries);
+      },
+      () => {
+        if (request.id === detailRequestId.current) setMilestoneSummaries({});
+      },
+    );
 
-    if (detailResult.status === "fulfilled") {
-      validDetail.current = detailResult.value;
-      setDetail(detailResult.value);
-      setMilestoneSummaries(summariesResult.status === "fulfilled" ? summariesResult.value.summaries : {});
-    } else {
-      setError(detailResult.reason instanceof Error ? detailResult.reason.message : "Failed to load Mission details.");
+    try {
+      const nextDetail = await request.response;
+      if (request.id !== detailRequestId.current) return;
+      validDetail.current = nextDetail;
+      setDetail(nextDetail);
+    } catch (reason) {
+      if (request.id !== detailRequestId.current) return;
+      setError(reason instanceof Error ? reason.message : "Failed to load Mission details.");
       if (!validDetail.current) setIsFocusMode(false);
     }
-    setDetailLoading(false);
+    if (request.id === detailRequestId.current) setDetailLoading(false);
   }, [startDetailRequest]);
 
   const refreshDetail = useCallback(async (key: string): Promise<StoryRefreshResult> => {
