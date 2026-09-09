@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, type MissionDetail } from "../api/client";
@@ -10,6 +10,26 @@ const dragHandlers = vi.hoisted(() => ({
   start: undefined as ((event: DragStartEvent) => void) | undefined,
   end: undefined as ((event: DragEndEvent) => void) | undefined,
 }));
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function move(storyKey: string, story: MissionDetail["stories"][number], milestone = "Milestone 2") {
+  act(() => dragHandlers.start?.({
+    active: { id: storyKey, data: { current: { story } } },
+  } as unknown as DragStartEvent));
+  await act(async () => dragHandlers.end?.({
+    active: { id: storyKey },
+    over: { data: { current: { milestone, column: "Feature" } } },
+  } as unknown as DragEndEvent));
+}
 
 vi.mock("@dnd-kit/core", async (importOriginal) => {
   const original = await importOriginal<typeof import("@dnd-kit/core")>();
@@ -217,5 +237,93 @@ describe("MilestoneWorkspace", () => {
     expect(screen.queryByRole("button", { name: "Milestone 1" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Milestone 2" })).toBeInTheDocument();
     expect(screen.getByText("Test story")).toBeInTheDocument();
+  });
+
+  it("prevents a second move while persistence is pending", async () => {
+    const persistence = deferred<void>();
+    const updateStory = vi.spyOn(api.missions, "updateStory").mockReturnValue(persistence.promise);
+    const mission = detail("MISSION-A");
+    render(<MilestoneWorkspace {...defaultProps} detail={mission} viewMode="map" />);
+
+    void move("MISSION-A-1", mission.stories[0]);
+    await move("MISSION-A-1", mission.stories[0], "Milestone 3");
+
+    expect(updateStory).toHaveBeenCalledTimes(1);
+    expect(updateStory).toHaveBeenCalledWith("MISSION-A-1", { milestone: "Milestone 2", category: "Feature" });
+    await act(async () => persistence.resolve());
+  });
+
+  it("rolls back a failed persistence request and shows its error", async () => {
+    vi.spyOn(api.missions, "updateStory").mockRejectedValue(new Error("Jira rejected the move"));
+    const mission = detail("MISSION-A");
+    render(<MilestoneWorkspace {...defaultProps} detail={mission} viewMode="map" focusMode />);
+
+    await move("MISSION-A-1", mission.stories[0]);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Jira rejected the move");
+    expect(screen.getByRole("button", { name: "Milestone 1" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Milestone 2" })).not.toBeInTheDocument();
+  });
+
+  it("retains a persisted move and shows a non-blocking refresh error", async () => {
+    vi.spyOn(api.missions, "updateStory").mockResolvedValue(undefined);
+    const mission = detail("MISSION-A");
+    render(<MilestoneWorkspace
+      {...defaultProps}
+      detail={mission}
+      viewMode="map"
+      focusMode
+      onStoryUpdated={vi.fn().mockRejectedValue(new Error("offline"))}
+    />);
+
+    await move("MISSION-A-1", mission.stories[0]);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Story moved, but Mission data could not be refreshed.");
+    expect(screen.queryByRole("button", { name: "Milestone 1" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Milestone 2" })).toBeInTheDocument();
+  });
+
+  it("uses refreshed server data after successful persistence", async () => {
+    vi.spyOn(api.missions, "updateStory").mockResolvedValue(undefined);
+    const mission = detail("MISSION-A");
+    const refreshed = detail("MISSION-A");
+    refreshed.stories[0] = makeStory({ key: "MISSION-A-1", milestone: "Milestone 3", category: "Feature" });
+    render(<MilestoneWorkspace
+      {...defaultProps}
+      detail={mission}
+      viewMode="map"
+      focusMode
+      onStoryUpdated={vi.fn().mockResolvedValue(refreshed)}
+    />);
+
+    await move("MISSION-A-1", mission.stories[0]);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Milestone 3" })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Milestone 2" })).not.toBeInTheDocument();
+  });
+
+  it("ignores a stale move failure after the selected Mission changes", async () => {
+    const persistence = deferred<void>();
+    const updateStory = vi.spyOn(api.missions, "updateStory").mockReturnValue(persistence.promise);
+    const firstMission = detail("MISSION-A");
+    const { rerender } = render(<MilestoneWorkspace {...defaultProps} detail={firstMission} viewMode="map" />);
+    act(() => dragHandlers.start?.({
+      active: { id: "MISSION-A-1", data: { current: { story: firstMission.stories[0] } } },
+    } as unknown as DragStartEvent));
+    act(() => {
+      void dragHandlers.end?.({
+        active: { id: "MISSION-A-1" },
+        over: { data: { current: { milestone: "Milestone 2", column: "Feature" } } },
+      } as unknown as DragEndEvent);
+    });
+    await waitFor(() => expect(updateStory).toHaveBeenCalledTimes(1));
+
+    const secondMission = detail("MISSION-B");
+    secondMission.stories[0] = { ...secondMission.stories[0], summary: "Second Mission story" };
+    rerender(<MilestoneWorkspace {...defaultProps} detail={secondMission} viewMode="map" />);
+    await act(async () => persistence.reject(new Error("Old Mission failed")));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Second Mission story")).toBeInTheDocument();
   });
 });

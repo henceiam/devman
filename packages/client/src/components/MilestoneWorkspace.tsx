@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-import { api, type MissionDetail, type MissionStory } from "../api/client";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { api, type MissionDetail } from "../api/client";
 import MilestoneGroup from "./MilestoneGroup";
 import { projectMilestones, type MilestoneRow } from "./milestoneProjection";
 import StoryMapGrid from "./StoryMapGrid";
+import { workspaceMoveReducer } from "./workspaceMoveState";
 
 interface MilestoneWorkspaceProps {
   detail: MissionDetail;
@@ -21,23 +22,32 @@ export function rowsForWorkspace(rows: MilestoneRow[], focusMode: boolean): Mile
 }
 
 export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMode, descriptions, onStoryUpdated, onStorySelect, onEditDescription, onDragActiveChange }: MilestoneWorkspaceProps) {
-  const [stories, setStories] = useState(detail.stories);
+  const [moveState, dispatchMove] = useReducer(workspaceMoveReducer, {
+    missionKey: detail.epic.key,
+    stories: detail.stories,
+    pendingStoryKeys: new Set<string>(),
+    error: null,
+  });
   const [listExpanded, setListExpanded] = useState<Set<string>>(new Set());
   const [mapCollapsed, setMapCollapsed] = useState<Set<string>>(new Set(["Out of scope"]));
-  const [pendingStoryKeys, setPendingStoryKeys] = useState<Set<string>>(new Set());
-  const [moveError, setMoveError] = useState<string | null>(null);
+  const pendingStoryKeysRef = useRef(new Set<string>());
+  const missionKeyRef = useRef(detail.epic.key);
+  const storiesRef = useRef(detail.stories);
+  missionKeyRef.current = detail.epic.key;
+  storiesRef.current = moveState.missionKey === detail.epic.key ? moveState.stories : detail.stories;
 
   useEffect(() => {
-    setStories(detail.stories);
+    dispatchMove({ type: "sync", stories: detail.stories });
   }, [detail.stories]);
 
   useEffect(() => {
-    setStories(detail.stories);
+    pendingStoryKeysRef.current.clear();
+    dispatchMove({ type: "reset", missionKey: detail.epic.key, stories: detail.stories });
     setListExpanded(new Set());
     setMapCollapsed(new Set(["Out of scope"]));
-    setPendingStoryKeys(new Set());
-    setMoveError(null);
   }, [detail.epic.key]);
+
+  const stories = moveState.missionKey === detail.epic.key ? moveState.stories : detail.stories;
 
   const projectedRows = useMemo(
     () => projectMilestones({ stories, hideDone, descriptions }),
@@ -58,34 +68,41 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMo
   };
 
   const moveStory = async (storyKey: string, milestone: string | null, category: string | null) => {
-    const previousStory = stories.find((story) => story.key === storyKey);
-    if (!previousStory || pendingStoryKeys.has(storyKey)) return;
-    setMoveError(null);
-    setPendingStoryKeys((current) => new Set(current).add(storyKey));
-    setStories((current) => current.map((story) => story.key === storyKey ? { ...story, milestone, category } : story));
+    const missionKey = detail.epic.key;
+    const previousStory = storiesRef.current.find((story) => story.key === storyKey);
+    if (!previousStory || pendingStoryKeysRef.current.has(storyKey)) return;
+    pendingStoryKeysRef.current.add(storyKey);
+    dispatchMove({ type: "start", storyKey, milestone, category });
     try {
       await api.missions.updateStory(storyKey, { milestone, category });
+      if (missionKeyRef.current !== missionKey) return;
       try {
         const refreshedDetail = await onStoryUpdated();
-        setStories(refreshedDetail.stories);
+        if (missionKeyRef.current === missionKey) {
+          dispatchMove({ type: "refresh-success", storyKey, stories: refreshedDetail.stories });
+        }
       } catch {
-        setMoveError("Story moved, but Mission data could not be refreshed.");
+        if (missionKeyRef.current === missionKey) {
+          dispatchMove({ type: "refresh-failure", error: "Story moved, but Mission data could not be refreshed." });
+        }
       }
     } catch (error) {
-      setStories((current) => current.map((story) => story.key === storyKey ? previousStory : story));
-      setMoveError(error instanceof Error ? error.message : "Failed to move story.");
+      if (missionKeyRef.current === missionKey) {
+        dispatchMove({
+          type: "rollback",
+          story: previousStory,
+          error: error instanceof Error ? error.message : "Failed to move story.",
+        });
+      }
     } finally {
-      setPendingStoryKeys((current) => {
-        const next = new Set(current);
-        next.delete(storyKey);
-        return next;
-      });
+      pendingStoryKeysRef.current.delete(storyKey);
+      if (missionKeyRef.current === missionKey) dispatchMove({ type: "finish", storyKey });
     }
   };
 
   if (viewMode === "list") {
     return <div className="space-y-3">
-      {moveError && <div role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700">{moveError}</div>}
+      {moveState.error && <div role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700">{moveState.error}</div>}
       {rows.map((row) => <MilestoneGroup
         key={row.id}
         row={row}
@@ -98,14 +115,14 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMo
   }
 
   return <div className="space-y-3">
-    {moveError && <div role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700">{moveError}</div>}
+    {moveState.error && <div role="alert" className="rounded bg-red-50 p-3 text-sm text-red-700">{moveState.error}</div>}
     <StoryMapGrid
       epic={detail.epic}
       rows={rows}
       collapsedRows={mapCollapsed}
       onToggleRow={(id) => toggle(setMapCollapsed, id)}
       onMoveStory={moveStory}
-      pendingStoryKeys={pendingStoryKeys}
+      pendingStoryKeys={moveState.pendingStoryKeys}
       onStorySelect={onStorySelect}
       onEditDescription={onEditDescription}
       onDragActiveChange={onDragActiveChange}
