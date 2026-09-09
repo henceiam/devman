@@ -31,9 +31,14 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMo
   const [listExpanded, setListExpanded] = useState<Set<string>>(new Set());
   const [mapCollapsed, setMapCollapsed] = useState<Set<string>>(new Set(["Out of scope"]));
   const pendingStoryKeysRef = useRef(new Set<string>());
-  const missionKeyRef = useRef(detail.epic.key);
+  const missionGenerationRef = useRef({ key: detail.epic.key, generation: 0 });
   const storiesRef = useRef(detail.stories);
-  missionKeyRef.current = detail.epic.key;
+  if (missionGenerationRef.current.key !== detail.epic.key) {
+    missionGenerationRef.current = {
+      key: detail.epic.key,
+      generation: missionGenerationRef.current.generation + 1,
+    };
+  }
   storiesRef.current = moveState.missionKey === detail.epic.key ? moveState.stories : detail.stories;
 
   useEffect(() => {
@@ -68,26 +73,27 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMo
   };
 
   const moveStory = async (storyKey: string, milestone: string | null, category: string | null) => {
-    const missionKey = detail.epic.key;
+    const generation = missionGenerationRef.current.generation;
+    const isCurrentGeneration = () => missionGenerationRef.current.generation === generation;
     const previousStory = storiesRef.current.find((story) => story.key === storyKey);
     if (!previousStory || pendingStoryKeysRef.current.has(storyKey)) return;
     pendingStoryKeysRef.current.add(storyKey);
     dispatchMove({ type: "start", storyKey, milestone, category });
     try {
       await api.missions.updateStory(storyKey, { milestone, category });
-      if (missionKeyRef.current !== missionKey) return;
+      if (!isCurrentGeneration()) return;
       try {
         const refreshedDetail = await onStoryUpdated();
-        if (missionKeyRef.current === missionKey) {
+        if (isCurrentGeneration()) {
           dispatchMove({ type: "refresh-success", storyKey, stories: refreshedDetail.stories });
         }
       } catch {
-        if (missionKeyRef.current === missionKey) {
+        if (isCurrentGeneration()) {
           dispatchMove({ type: "refresh-failure", error: "Story moved, but Mission data could not be refreshed." });
         }
       }
     } catch (error) {
-      if (missionKeyRef.current === missionKey) {
+      if (isCurrentGeneration()) {
         dispatchMove({
           type: "rollback",
           story: previousStory,
@@ -95,8 +101,10 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMo
         });
       }
     } finally {
-      pendingStoryKeysRef.current.delete(storyKey);
-      if (missionKeyRef.current === missionKey) dispatchMove({ type: "finish", storyKey });
+      if (isCurrentGeneration()) {
+        pendingStoryKeysRef.current.delete(storyKey);
+        dispatchMove({ type: "finish", storyKey });
+      }
     }
   };
 

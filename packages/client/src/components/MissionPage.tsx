@@ -39,6 +39,13 @@ function sizeOrder(size: string | null) {
   return size ? (order[size] ?? 99) : 99;
 }
 
+function ViewModeToggle({ value, onChange }: { value: "list" | "map"; onChange: (value: "list" | "map") => void }) {
+  return <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+    <button type="button" onClick={() => onChange("list")} className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${value === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>List</button>
+    <button type="button" onClick={() => onChange("map")} className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${value === "map" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Story Map</button>
+  </div>;
+}
+
 export default function MissionPage() {
   const { missionKey } = useParams<{ missionKey: string }>();
   const navigate = useNavigate();
@@ -223,15 +230,13 @@ export default function MissionPage() {
   );
   const viewControls = detail ? (
     <div className="flex items-center gap-2">
-      <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
-        <button onClick={() => setViewMode("list")} className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${viewMode === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>List</button>
-        <button onClick={() => setViewMode("map")} className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${viewMode === "map" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Story Map</button>
-      </div>
+      <ViewModeToggle value={viewMode} onChange={setViewMode} />
       {hideDone && <span className="whitespace-nowrap rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] text-yellow-700">Done hidden</span>}
     </div>
   ) : null;
 
-  const workspace = detail && !detailLoading ? (
+  const detailIsCurrent = detail?.epic.key === missionKey;
+  const workspace = detail && detailIsCurrent ? (
     <MilestoneWorkspace
       detail={detail}
       viewMode={viewMode}
@@ -303,7 +308,7 @@ export default function MissionPage() {
         <p className="text-gray-500">Loading mission details…</p>
       )}
 
-      {detail && !detailLoading && (
+      {detail && detailIsCurrent && (
         <div className="space-y-6">
           {!isFocusMode && <>
           {/* Epic header */}
@@ -383,24 +388,7 @@ export default function MissionPage() {
           {/* View toggle + content */}
           {!isFocusMode && <div className="flex items-center gap-4">
             {detail.epic.columns.length > 0 && (
-              <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
-                <button
-                  onClick={() => setViewMode("list")}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                    viewMode === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  List
-                </button>
-                <button
-                  onClick={() => setViewMode("map")}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-                    viewMode === "map" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Story Map
-                </button>
-              </div>
+              <ViewModeToggle value={viewMode} onChange={setViewMode} />
             )}
 
             <span className="ml-auto flex items-center gap-3 text-[11px] text-gray-400">

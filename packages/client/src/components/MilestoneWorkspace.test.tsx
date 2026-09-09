@@ -326,4 +326,35 @@ describe("MilestoneWorkspace", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByText("Second Mission story")).toBeInTheDocument();
   });
+
+  it("ignores a stale move failure after switching away and back to the same Mission", async () => {
+    const persistence = deferred<void>();
+    vi.spyOn(api.missions, "updateStory").mockReturnValue(persistence.promise);
+    const firstVisit = detail("MISSION-A");
+    const { rerender } = render(<MilestoneWorkspace {...defaultProps} detail={firstVisit} viewMode="map" />);
+
+    act(() => dragHandlers.start?.({
+      active: { id: "MISSION-A-1", data: { current: { story: firstVisit.stories[0] } } },
+    } as unknown as DragStartEvent));
+    act(() => {
+      void dragHandlers.end?.({
+        active: { id: "MISSION-A-1" },
+        over: { data: { current: { milestone: "Milestone 2", column: "Feature" } } },
+      } as unknown as DragEndEvent);
+    });
+    await waitFor(() => expect(api.missions.updateStory).toHaveBeenCalledTimes(1));
+
+    const secondMission = detail("MISSION-B");
+    secondMission.stories[0] = { ...secondMission.stories[0], summary: "Second Mission story" };
+    rerender(<MilestoneWorkspace {...defaultProps} detail={secondMission} viewMode="map" />);
+    await waitFor(() => expect(screen.getByText("Second Mission story")).toBeInTheDocument());
+    const secondVisit = detail("MISSION-A");
+    secondVisit.stories[0] = { ...secondVisit.stories[0], summary: "Story from the second visit" };
+    rerender(<MilestoneWorkspace {...defaultProps} detail={secondVisit} viewMode="map" />);
+    await waitFor(() => expect(screen.getByText("Story from the second visit")).toBeInTheDocument());
+    await act(async () => persistence.reject(new Error("First visit failed")));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByText("Story from the second visit")).toBeInTheDocument();
+  });
 });

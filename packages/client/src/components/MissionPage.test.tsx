@@ -175,6 +175,42 @@ describe("Mission Focus mode", () => {
     expect(screen.getByRole("button", { name: "Milestone 1" })).toHaveAttribute("aria-expanded", "true");
   });
 
+  it("keeps an optimistic move mounted and locked during manual refresh", async () => {
+    const persistence = deferred<void>();
+    const refresh = deferred<MissionDetail>();
+    const updateStory = vi.spyOn(api.missions, "updateStory").mockReturnValue(persistence.promise);
+    renderMission();
+    const entry = await screen.findByRole("button", { name: "Enter Focus mode" });
+    await waitFor(() => expect(entry).toBeEnabled());
+    fireEvent.click(entry);
+
+    const story = mission("MISSION-A").stories[0];
+    act(() => missionDragHandlers.start?.({ active: { id: story.key, data: { current: { story } } } } as unknown as DragStartEvent));
+    act(() => {
+      void missionDragHandlers.end?.({
+        active: { id: story.key },
+        over: { data: { current: { milestone: "Milestone 2", column: "Feature" } } },
+      } as unknown as DragEndEvent);
+    });
+    await waitFor(() => expect(updateStory).toHaveBeenCalledTimes(1));
+
+    vi.mocked(api.missions.getDetail).mockReturnValue(refresh.promise);
+    fireEvent.keyDown(window, { key: "r" });
+    expect(screen.getByText("Loading mission details…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Milestone 1" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Milestone 2" })).toBeInTheDocument();
+
+    act(() => missionDragHandlers.start?.({ active: { id: story.key, data: { current: { story } } } } as unknown as DragStartEvent));
+    await act(async () => missionDragHandlers.end?.({
+      active: { id: story.key },
+      over: { data: { current: { milestone: "Milestone 3", column: "Feature" } } },
+    } as unknown as DragEndEvent));
+    expect(updateStory).toHaveBeenCalledTimes(1);
+
+    await act(async () => refresh.resolve(mission("MISSION-A")));
+    await act(async () => persistence.resolve());
+  });
+
   it("keeps Focus active across view and Mission switches, including replacement loading", async () => {
     const missionBRequest = deferred<MissionDetail>();
     vi.mocked(api.missions.getDetail).mockImplementation((key) => key === "MISSION-B" ? missionBRequest.promise : Promise.resolve(mission(key)));
