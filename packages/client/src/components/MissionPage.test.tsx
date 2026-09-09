@@ -296,6 +296,55 @@ describe("Mission Focus mode", () => {
     expect(screen.queryByRole("button", { name: "Milestone 1" })).not.toBeInTheDocument();
   });
 
+  it("applies a newer canonical manual refresh after its superseded move refresh settles", async () => {
+    const persistence = deferred<void>();
+    const postMoveRefresh = deferred<MissionDetail>();
+    const manualRefresh = deferred<MissionDetail>();
+    vi.spyOn(api.missions, "updateStory").mockReturnValue(persistence.promise);
+    renderMission();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Enter Focus mode" })).toBeEnabled());
+    const initialDetailRequests = vi.mocked(api.missions.getDetail).mock.calls.length;
+    vi.mocked(api.missions.getDetail)
+      .mockReturnValueOnce(postMoveRefresh.promise)
+      .mockReturnValueOnce(manualRefresh.promise);
+
+    const story = mission("MISSION-A").stories[0];
+    act(() => missionDragHandlers.start?.({ active: { id: story.key, data: { current: { story } } } } as unknown as DragStartEvent));
+    act(() => {
+      void missionDragHandlers.end?.({
+        active: { id: story.key },
+        over: { data: { current: { milestone: "Milestone 2", column: "Feature" } } },
+      } as unknown as DragEndEvent);
+    });
+    await act(async () => persistence.resolve());
+    await waitFor(() => expect(api.missions.getDetail).toHaveBeenCalledTimes(initialDetailRequests + 1));
+    fireEvent.keyDown(window, { key: "r" });
+    await waitFor(() => expect(api.missions.getDetail).toHaveBeenCalledTimes(initialDetailRequests + 2));
+
+    const canonicalMission = mission("MISSION-A");
+    canonicalMission.stories[0] = makeStory({
+      key: "MISSION-A-1",
+      summary: "MISSION-A story",
+      milestone: "Milestone 3",
+      category: "Feature",
+    });
+    await act(async () => manualRefresh.resolve(canonicalMission));
+    expect(screen.getByRole("button", { name: "Milestone 2" })).toBeInTheDocument();
+
+    const optimisticMission = mission("MISSION-A");
+    optimisticMission.stories[0] = makeStory({
+      key: "MISSION-A-1",
+      summary: "MISSION-A story",
+      milestone: "Milestone 2",
+      category: "Feature",
+    });
+    await act(async () => postMoveRefresh.resolve(optimisticMission));
+
+    expect(screen.getByRole("button", { name: "Milestone 3" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Milestone 2" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("does not let a move from an unmounted workspace supersede the selected Mission load", async () => {
     const persistence = deferred<void>();
     const missionBRequest = deferred<MissionDetail>();

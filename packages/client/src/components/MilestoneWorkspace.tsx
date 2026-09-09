@@ -30,6 +30,7 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMo
     missionKey: detail.epic.key,
     stories: detail.stories,
     pendingStoryKeys: new Set<string>(),
+    queuedStories: null,
     error: null,
   });
   const [listExpanded, setListExpanded] = useState<Set<string>>(new Set());

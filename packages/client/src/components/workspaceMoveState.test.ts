@@ -7,6 +7,7 @@ function state(): WorkspaceMoveState {
     missionKey: "MISSION-A",
     stories: [makeStory({ key: "STORY-1", milestone: "Milestone 1", category: "Feature" })],
     pendingStoryKeys: new Set(),
+    queuedStories: null,
     error: null,
   };
 }
@@ -65,11 +66,47 @@ describe("workspaceMoveReducer", () => {
     expect(refreshFailed.error).toBe("Refresh failed");
 
     const serverStories = [makeStory({ key: "STORY-1", milestone: "Milestone 3" })];
-    expect(workspaceMoveReducer(moved, {
+    const refreshed = workspaceMoveReducer(moved, {
       type: "refresh-success",
       storyKey: "STORY-1",
       stories: serverStories,
-    }).stories).toEqual(serverStories);
+    });
+    expect(refreshed.stories[0].milestone).toBe("Milestone 2");
+    expect(workspaceMoveReducer(refreshed, { type: "finish", storyKey: "STORY-1" }).stories).toEqual(serverStories);
+  });
+
+  it("applies the latest queued canonical stories after all concurrent moves finish", () => {
+    const initial = {
+      ...state(),
+      stories: [
+        makeStory({ key: "STORY-1", milestone: "Milestone 1" }),
+        makeStory({ key: "STORY-2", milestone: "Milestone 1" }),
+      ],
+    };
+    const firstMove = workspaceMoveReducer(initial, {
+      type: "start",
+      storyKey: "STORY-1",
+      milestone: "Milestone 2",
+      category: "Feature",
+    });
+    const secondMove = workspaceMoveReducer(firstMove, {
+      type: "start",
+      storyKey: "STORY-2",
+      milestone: "Milestone 2",
+      category: "Feature",
+    });
+    const olderCanonical = initial.stories.map((story) => ({ ...story, milestone: "Milestone 3" }));
+    const newerCanonical = initial.stories.map((story) => ({ ...story, milestone: "Milestone 4" }));
+    const firstSync = workspaceMoveReducer(secondMove, { type: "sync", stories: olderCanonical });
+    const latestSync = workspaceMoveReducer(firstSync, { type: "sync", stories: newerCanonical });
+    const onePending = workspaceMoveReducer(latestSync, { type: "finish", storyKey: "STORY-1" });
+
+    expect(onePending.stories.map((story) => story.milestone)).toEqual(["Milestone 2", "Milestone 2"]);
+    expect(onePending.queuedStories).toEqual(newerCanonical);
+
+    const finished = workspaceMoveReducer(onePending, { type: "finish", storyKey: "STORY-2" });
+    expect(finished.stories).toEqual(newerCanonical);
+    expect(finished.queuedStories).toBeNull();
   });
 
   it("resets optimistic, pending, and error state on Mission change", () => {
@@ -89,6 +126,7 @@ describe("workspaceMoveReducer", () => {
       missionKey: "MISSION-B",
       stories: nextStories,
       pendingStoryKeys: new Set(),
+      queuedStories: null,
       error: null,
     });
   });

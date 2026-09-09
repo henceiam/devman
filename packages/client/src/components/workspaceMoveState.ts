@@ -4,6 +4,7 @@ export interface WorkspaceMoveState {
   missionKey: string;
   stories: MissionStory[];
   pendingStoryKeys: ReadonlySet<string>;
+  queuedStories: MissionStory[] | null;
   error: string | null;
 }
 
@@ -19,12 +20,15 @@ export type WorkspaceMoveAction =
 export function workspaceMoveReducer(state: WorkspaceMoveState, action: WorkspaceMoveAction): WorkspaceMoveState {
   switch (action.type) {
     case "sync":
-      return state.pendingStoryKeys.size === 0 ? { ...state, stories: action.stories } : state;
+      return state.pendingStoryKeys.size === 0
+        ? { ...state, stories: action.stories, queuedStories: null }
+        : { ...state, queuedStories: action.stories };
     case "reset":
       return {
         missionKey: action.missionKey,
         stories: action.stories,
         pendingStoryKeys: new Set(),
+        queuedStories: null,
         error: null,
       };
     case "start": {
@@ -45,14 +49,9 @@ export function workspaceMoveReducer(state: WorkspaceMoveState, action: Workspac
         error: action.error,
       };
     case "refresh-success": {
-      const optimisticStories = new Map(
-        state.stories
-          .filter((story) => story.key !== action.storyKey && state.pendingStoryKeys.has(story.key))
-          .map((story) => [story.key, story]),
-      );
       return {
         ...state,
-        stories: action.stories.map((story) => optimisticStories.get(story.key) ?? story),
+        queuedStories: action.stories,
       };
     }
     case "refresh-failure":
@@ -60,6 +59,14 @@ export function workspaceMoveReducer(state: WorkspaceMoveState, action: Workspac
     case "finish": {
       const pendingStoryKeys = new Set(state.pendingStoryKeys);
       pendingStoryKeys.delete(action.storyKey);
+      if (pendingStoryKeys.size === 0 && state.queuedStories) {
+        return {
+          ...state,
+          stories: state.queuedStories,
+          pendingStoryKeys,
+          queuedStories: null,
+        };
+      }
       return { ...state, pendingStoryKeys };
     }
   }
