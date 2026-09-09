@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type MissionDetail, type MissionStory } from "../api/client";
 import MilestoneGroup from "./MilestoneGroup";
-import { projectMilestones } from "./milestoneProjection";
+import { projectMilestones, type MilestoneRow } from "./milestoneProjection";
 import StoryMapGrid from "./StoryMapGrid";
 
 interface MilestoneWorkspaceProps {
   detail: MissionDetail;
   viewMode: "list" | "map";
   hideDone: boolean;
+  focusMode: boolean;
   descriptions: Record<string, string>;
   onStoryUpdated: () => Promise<MissionDetail>;
   onStorySelect?: (key: string) => void;
@@ -15,7 +16,11 @@ interface MilestoneWorkspaceProps {
   onDragActiveChange?: (active: boolean) => void;
 }
 
-export default function MilestoneWorkspace({ detail, viewMode, hideDone, descriptions, onStoryUpdated, onStorySelect, onEditDescription, onDragActiveChange }: MilestoneWorkspaceProps) {
+export function rowsForWorkspace(rows: MilestoneRow[], focusMode: boolean): MilestoneRow[] {
+  return focusMode ? rows.filter((row) => row.visibleStories.length > 0) : rows;
+}
+
+export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMode, descriptions, onStoryUpdated, onStorySelect, onEditDescription, onDragActiveChange }: MilestoneWorkspaceProps) {
   const [stories, setStories] = useState(detail.stories);
   const [listExpanded, setListExpanded] = useState<Set<string>>(new Set());
   const [mapCollapsed, setMapCollapsed] = useState<Set<string>>(new Set(["Out of scope"]));
@@ -34,9 +39,13 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, descrip
     setMoveError(null);
   }, [detail.epic.key]);
 
-  const rows = useMemo(
+  const projectedRows = useMemo(
     () => projectMilestones({ stories, hideDone, descriptions }),
     [stories, hideDone, descriptions],
+  );
+  const rows = useMemo(
+    () => rowsForWorkspace(projectedRows, focusMode),
+    [projectedRows, focusMode],
   );
 
   const toggle = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) => {

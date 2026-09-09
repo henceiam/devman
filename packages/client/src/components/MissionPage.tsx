@@ -236,6 +236,7 @@ export default function MissionPage() {
       detail={detail}
       viewMode={viewMode}
       hideDone={hideDone}
+      focusMode={isFocusMode}
       descriptions={milestoneSummaries}
       onStoryUpdated={() => refreshDetail(detail.epic.key)}
       onStorySelect={(storyKey) => setModal({ type: "story", storyKey })}
