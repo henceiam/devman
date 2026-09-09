@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { describe, expect, it, vi } from "vitest";
 import type { MissionDetail } from "../api/client";
 import { makeStory } from "../test/fixtures";
@@ -7,12 +8,27 @@ import StoryMapGrid from "./StoryMapGrid";
 
 const droppableData = vi.hoisted(() => new Map<string, unknown>());
 const draggableIds = vi.hoisted(() => new Set<string>());
+const dragHandlers = vi.hoisted(() => ({
+  start: undefined as ((event: DragStartEvent) => void) | undefined,
+  end: undefined as ((event: DragEndEvent) => void) | undefined,
+  cancel: undefined as (() => void) | undefined,
+}));
 
 vi.mock("@dnd-kit/core", async (importOriginal) => {
   const original = await importOriginal<typeof import("@dnd-kit/core")>();
   return {
     ...original,
-    DndContext: ({ children }: { children: React.ReactNode }) => children,
+    DndContext: ({ children, onDragStart, onDragEnd, onDragCancel }: {
+      children: React.ReactNode;
+      onDragStart?: (event: DragStartEvent) => void;
+      onDragEnd?: (event: DragEndEvent) => void;
+      onDragCancel?: () => void;
+    }) => {
+      dragHandlers.start = onDragStart;
+      dragHandlers.end = onDragEnd;
+      dragHandlers.cancel = onDragCancel;
+      return children;
+    },
     DragOverlay: ({ children }: { children: React.ReactNode }) => children,
     useDroppable: ({ id, data }: { id: string; data: unknown }) => {
       droppableData.set(id, data);
@@ -91,5 +107,30 @@ describe("StoryMapGrid", () => {
 
     expect(droppableData.has("Milestone 1::Feature")).toBe(false);
     expect(droppableData.has("Milestone 2::Feature")).toBe(true);
+  });
+
+  it("signals drag start, end, and cancellation to the workspace", async () => {
+    const story = makeStory({ key: "DRAG-1", milestone: "Milestone 1", category: "Feature" });
+    const onDragActiveChange = vi.fn();
+    const rows = projectMilestones({ stories: [story], hideDone: false, descriptions: {} });
+
+    const { unmount } = render(<StoryMapGrid
+      epic={epic}
+      rows={rows}
+      collapsedRows={new Set()}
+      onToggleRow={vi.fn()}
+      onMoveStory={vi.fn()}
+      pendingStoryKeys={new Set()}
+      onDragActiveChange={onDragActiveChange}
+    />);
+
+    act(() => dragHandlers.start?.({ active: { id: story.key, data: { current: { story } } } } as unknown as DragStartEvent));
+    await act(async () => dragHandlers.end?.({ active: { id: story.key }, over: null } as DragEndEvent));
+    act(() => dragHandlers.start?.({ active: { id: story.key, data: { current: { story } } } } as unknown as DragStartEvent));
+    act(() => dragHandlers.cancel?.());
+    act(() => dragHandlers.start?.({ active: { id: story.key, data: { current: { story } } } } as unknown as DragStartEvent));
+    unmount();
+
+    expect(onDragActiveChange.mock.calls).toEqual([[true], [false], [true], [false], [true], [false]]);
   });
 });

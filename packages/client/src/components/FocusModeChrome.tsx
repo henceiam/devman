@@ -20,7 +20,7 @@ export default function FocusModeChrome({ identity, controls, onExit }: FocusMod
         aria-label="Exit Focus mode"
         aria-keyshortcuts="Z"
       >
-        <span aria-hidden="true">Exit Focus</span>
+        <span>Exit Focus mode</span>
         <kbd aria-hidden="true" className="rounded border border-gray-300 bg-gray-50 px-1.5 py-0.5">Z</kbd>
       </button>
     </>

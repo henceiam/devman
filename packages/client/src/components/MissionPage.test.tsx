@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { DragEndEvent, DragStartEvent } from "@dnd-kit/core";
 import { StrictMode } from "react";
 import { createMemoryRouter, MemoryRouter, RouterProvider } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +8,39 @@ import { AppChromeProvider, useAppChromeState } from "../AppChrome";
 import { api, type MissionDetail, type MissionSummary } from "../api/client";
 import { makeStory } from "../test/fixtures";
 import MissionPage from "./MissionPage";
+
+const missionDragHandlers = vi.hoisted(() => ({
+  start: undefined as ((event: DragStartEvent) => void) | undefined,
+  end: undefined as ((event: DragEndEvent) => void) | undefined,
+  cancel: undefined as (() => void) | undefined,
+}));
+
+vi.mock("@dnd-kit/core", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@dnd-kit/core")>();
+  return {
+    ...original,
+    DndContext: ({ children, onDragStart, onDragEnd, onDragCancel }: {
+      children: React.ReactNode;
+      onDragStart?: (event: DragStartEvent) => void;
+      onDragEnd?: (event: DragEndEvent) => void;
+      onDragCancel?: () => void;
+    }) => {
+      missionDragHandlers.start = onDragStart;
+      missionDragHandlers.end = onDragEnd;
+      missionDragHandlers.cancel = onDragCancel;
+      return children;
+    },
+    DragOverlay: ({ children }: { children: React.ReactNode }) => children,
+    useDroppable: () => ({ setNodeRef: vi.fn(), isOver: false }),
+    useDraggable: () => ({
+      attributes: {},
+      listeners: {},
+      setNodeRef: vi.fn(),
+      transform: null,
+      isDragging: false,
+    }),
+  };
+});
 
 function mission(key: string, shortName = `${key} short`): MissionDetail {
   return {
@@ -44,6 +78,7 @@ function createMediaQuery(initialMatches: boolean) {
     addListener: vi.fn(),
     removeListener: vi.fn(),
     dispatchEvent: vi.fn(),
+    get listenerCount() { return listeners.size; },
     setMatches(next: boolean) {
       matches = next;
       listeners.forEach((listener) => listener({ matches: next, media: mediaQuery.media } as MediaQueryListEvent));
@@ -110,7 +145,9 @@ describe("Mission Focus mode", () => {
 
     fireEvent.click(entry);
 
+    expect(entry).toHaveAttribute("aria-keyshortcuts", "Z");
     expect(await screen.findByRole("button", { name: "Exit Focus mode" })).toHaveAttribute("aria-keyshortcuts", "Z");
+    expect(screen.getByRole("button", { name: "Exit Focus mode" })).toHaveAccessibleName("Exit Focus mode");
     expect(screen.queryByText("DevMan global header")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Mission")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Edit categories" })).not.toBeInTheDocument();
@@ -179,6 +216,22 @@ describe("Mission Focus mode", () => {
     expect(screen.queryByRole("button", { name: "Edit description" })).not.toBeInTheDocument();
   });
 
+  it("allows deliberate Focus exit during replacement loading and restores the entry control", async () => {
+    const missionBRequest = deferred<MissionDetail>();
+    vi.mocked(api.missions.getDetail).mockImplementation((key) => key === "MISSION-B" ? missionBRequest.promise : Promise.resolve(mission(key)));
+    const router = renderMission();
+    const entry = await screen.findByRole("button", { name: "Enter Focus mode" });
+    await waitFor(() => expect(entry).toBeEnabled());
+    fireEvent.click(entry);
+
+    await act(async () => router.navigate("/missions/MISSION-B"));
+    fireEvent.keyDown(window, { key: "z" });
+
+    expect(screen.queryByRole("button", { name: "Exit Focus mode" })).not.toBeInTheDocument();
+    await act(async () => missionBRequest.resolve(mission("MISSION-B")));
+    expect(screen.getByRole("button", { name: "Enter Focus mode" })).toHaveFocus();
+  });
+
   it("exits below 1024px without restoring Focus when the viewport grows", async () => {
     renderMission();
     const entry = await screen.findByRole("button", { name: "Enter Focus mode" });
@@ -193,6 +246,139 @@ describe("Mission Focus mode", () => {
     act(() => mediaQuery.setMatches(true));
     expect(screen.queryByRole("button", { name: "Exit Focus mode" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Enter Focus mode" })).toBeEnabled();
+  });
+
+  it("toggles Focus once per eligible Z key and moves focus with deliberate transitions", async () => {
+    renderMission();
+    const entry = await screen.findByRole("button", { name: "Enter Focus mode" });
+    await waitFor(() => expect(entry).toBeEnabled());
+
+    fireEvent.keyDown(window, { key: "Z", shiftKey: true });
+    const focusHeading = screen.getByRole("heading", { name: /MISSION-A short/ });
+    expect(focusHeading).toHaveFocus();
+
+    fireEvent.keyDown(window, { key: "z" });
+    expect(screen.getByRole("button", { name: "Enter Focus mode" })).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Exit Focus mode" })).not.toBeInTheDocument();
+  });
+
+  it("keeps one media-query and keyboard effect under Strict Mode", async () => {
+    const addSpy = vi.spyOn(window, "addEventListener");
+    const removeSpy = vi.spyOn(window, "removeEventListener");
+    renderMission();
+    await screen.findByRole("button", { name: "Enter Focus mode" });
+
+    expect(mediaQuery.listenerCount).toBe(1);
+    expect(addSpy.mock.calls.filter(([type]) => type === "keydown").length).toBe(2);
+    expect(removeSpy.mock.calls.filter(([type]) => type === "keydown").length).toBe(1);
+  });
+
+  it("ignores prevented, repeating, modified, and editable-target Mission shortcuts", async () => {
+    renderMission();
+    const entry = await screen.findByRole("button", { name: "Enter Focus mode" });
+    await waitFor(() => expect(entry).toBeEnabled());
+
+    fireEvent.keyDown(window, { key: "z", repeat: true });
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+    const prevented = new KeyboardEvent("keydown", { key: "z", cancelable: true });
+    prevented.preventDefault();
+    window.dispatchEvent(prevented);
+    const editable = document.createElement("div");
+    editable.setAttribute("contenteditable", "true");
+    const child = document.createElement("span");
+    editable.append(child);
+    document.body.append(editable);
+    fireEvent.keyDown(child, { key: "z" });
+
+    expect(screen.queryByRole("button", { name: "Exit Focus mode" })).not.toBeInTheDocument();
+  });
+
+  it("suppresses Mission shortcuts while a modal is open and Escape only closes the modal", async () => {
+    renderMission();
+    const entry = await screen.findByRole("button", { name: "Enter Focus mode" });
+    await waitFor(() => expect(entry).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Edit categories" }));
+    expect(screen.getByRole("heading", { name: "Edit Categories" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "z" });
+    fireEvent.keyDown(window, { key: "d" });
+    fireEvent.keyDown(window, { key: "r" });
+    expect(screen.queryByRole("button", { name: "Exit Focus mode" })).not.toBeInTheDocument();
+    expect(screen.getByText("Done hidden")).toBeInTheDocument();
+
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Escape" });
+    expect(screen.queryByRole("heading", { name: "Edit Categories" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exit Focus mode" })).not.toBeInTheDocument();
+  });
+
+  it("closes Story detail with Escape without leaving Focus mode", async () => {
+    vi.spyOn(api.missions, "getStoryDetail").mockReturnValue(new Promise(() => {}));
+    vi.spyOn(api.missions, "getStoryComments").mockReturnValue(new Promise(() => {}));
+    renderMission();
+    const entry = await screen.findByRole("button", { name: "Enter Focus mode" });
+    await waitFor(() => expect(entry).toBeEnabled());
+    fireEvent.click(entry);
+    const story = screen.getByText("MISSION-A story");
+    fireEvent.pointerDown(story, { clientX: 10, clientY: 10 });
+    fireEvent.pointerUp(story, { clientX: 10, clientY: 10 });
+    expect(screen.getByRole("heading", { name: "Loading…" })).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "Escape" });
+
+    expect(screen.queryByRole("heading", { name: "Loading…" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exit Focus mode" })).toBeInTheDocument();
+  });
+
+  it("keeps Mission modal states mutually exclusive", async () => {
+    renderMission();
+    await screen.findByRole("button", { name: "Edit categories" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit categories" }));
+    fireEvent.click(screen.getAllByTitle("Edit milestone description")[0]);
+
+    expect(screen.queryByRole("heading", { name: "Edit Categories" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Edit milestone description: Milestone 1" })).toBeInTheDocument();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("heading", { name: /Edit milestone description/ })).not.toBeInTheDocument();
+  });
+
+  it("suppresses Z during Story Map drag and restores it after cancellation", async () => {
+    renderMission();
+    const entry = await screen.findByRole("button", { name: "Enter Focus mode" });
+    await waitFor(() => expect(entry).toBeEnabled());
+    const story = mission("MISSION-A").stories[0];
+
+    act(() => missionDragHandlers.start?.({ active: { id: story.key, data: { current: { story } } } } as unknown as DragStartEvent));
+    fireEvent.keyDown(window, { key: "z" });
+    expect(screen.queryByRole("button", { name: "Exit Focus mode" })).not.toBeInTheDocument();
+
+    act(() => missionDragHandlers.cancel?.());
+    fireEvent.keyDown(window, { key: "z" });
+    expect(screen.getByRole("button", { name: "Exit Focus mode" })).toBeInTheDocument();
+  });
+
+  it("moves focus to normal Mission identity when responsive exit removes the focused command bar", async () => {
+    renderMission();
+    const entry = await screen.findByRole("button", { name: "Enter Focus mode" });
+    await waitFor(() => expect(entry).toBeEnabled());
+    fireEvent.click(entry);
+    expect(screen.getByRole("heading", { name: /MISSION-A short/ })).toHaveFocus();
+
+    act(() => mediaQuery.setMatches(false));
+
+    expect(screen.getByRole("heading", { name: "MISSION-A full summary" })).toHaveFocus();
+  });
+
+  it("preserves focus on a workspace control that survives responsive exit", async () => {
+    renderMission();
+    const entry = await screen.findByRole("button", { name: "Enter Focus mode" });
+    await waitFor(() => expect(entry).toBeEnabled());
+    fireEvent.click(entry);
+    const milestoneRow = screen.getByRole("button", { name: "Milestone 1" });
+    milestoneRow.focus();
+
+    act(() => mediaQuery.setMatches(false));
+
+    expect(milestoneRow).toHaveFocus();
   });
 
   it("suppresses and restores the production application header", async () => {

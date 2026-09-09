@@ -12,9 +12,10 @@ interface MilestoneWorkspaceProps {
   onStoryUpdated: () => Promise<MissionDetail>;
   onStorySelect?: (key: string) => void;
   onEditDescription?: (milestoneName: string) => void;
+  onDragActiveChange?: (active: boolean) => void;
 }
 
-export default function MilestoneWorkspace({ detail, viewMode, hideDone, descriptions, onStoryUpdated, onStorySelect, onEditDescription }: MilestoneWorkspaceProps) {
+export default function MilestoneWorkspace({ detail, viewMode, hideDone, descriptions, onStoryUpdated, onStorySelect, onEditDescription, onDragActiveChange }: MilestoneWorkspaceProps) {
   const [stories, setStories] = useState(detail.stories);
   const [listExpanded, setListExpanded] = useState<Set<string>>(new Set());
   const [mapCollapsed, setMapCollapsed] = useState<Set<string>>(new Set(["Out of scope"]));
@@ -98,6 +99,7 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, descrip
       pendingStoryKeys={pendingStoryKeys}
       onStorySelect={onStorySelect}
       onEditDescription={onEditDescription}
+      onDragActiveChange={onDragActiveChange}
     />
   </div>;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { api, type MissionSummary, type MissionDetail } from "../api/client";
 import { useAppChrome } from "../AppChrome";
@@ -9,8 +9,16 @@ import EditCategoriesModal from "./EditCategoriesModal";
 import EditMilestoneSummaryModal from "./EditMilestoneSummaryModal";
 import { statusBadge } from "./statusUtils";
 import FocusModeChrome from "./FocusModeChrome";
+import { getMissionShortcut } from "./missionShortcuts";
 
 const FOCUS_MEDIA_QUERY = "(min-width: 1024px)";
+
+type MissionModal =
+  | { type: "story"; storyKey: string }
+  | { type: "categories" }
+  | { type: "milestone-description"; milestoneName: string };
+
+type FocusTransition = "enter" | "deliberate-exit" | "responsive-exit";
 
 const COPY_STATUS_COLORS: Record<string, string> = {
   "Copy - ready to start": "bg-sky-100 text-sky-700",
@@ -42,14 +50,18 @@ export default function MissionPage() {
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "map">("map");
   const [hideDone, setHideDone] = useState(true);
-  const [selectedStoryKey, setSelectedStoryKey] = useState<string | null>(null);
-  const [editingCategories, setEditingCategories] = useState(false);
+  const [modal, setModal] = useState<MissionModal | null>(null);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [focusSupported, setFocusSupported] = useState(() => window.matchMedia(FOCUS_MEDIA_QUERY).matches);
   const [milestoneSummaries, setMilestoneSummaries] = useState<Record<string, string>>({});
-  const [editingSummaryFor, setEditingSummaryFor] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
   const detailRequestId = useRef(0);
   const validDetail = useRef<MissionDetail | null>(null);
+  const entryButtonRef = useRef<HTMLButtonElement>(null);
+  const focusHeadingRef = useRef<HTMLHeadingElement>(null);
+  const normalHeadingRef = useRef<HTMLHeadingElement>(null);
+  const focusTransition = useRef<FocusTransition | null>(null);
+  const responsiveFocusTarget = useRef<Element | null>(null);
 
   useAppChrome({ headerHidden: isFocusMode });
 
@@ -57,13 +69,47 @@ export default function MissionPage() {
     const mediaQuery = window.matchMedia(FOCUS_MEDIA_QUERY);
     const handleChange = (event: MediaQueryListEvent) => {
       setFocusSupported(event.matches);
-      if (!event.matches) setIsFocusMode(false);
+      if (!event.matches) {
+        responsiveFocusTarget.current = document.activeElement;
+        focusTransition.current = "responsive-exit";
+        setIsFocusMode(false);
+      }
     };
 
     setFocusSupported(mediaQuery.matches);
     mediaQuery.addEventListener("change", handleChange);
     return () => mediaQuery.removeEventListener("change", handleChange);
   }, []);
+
+  useLayoutEffect(() => {
+    const transition = focusTransition.current;
+    if (!transition) return;
+
+    if (transition === "enter") {
+      focusHeadingRef.current?.focus();
+      focusTransition.current = null;
+    }
+    if (transition === "deliberate-exit") {
+      if (entryButtonRef.current && !entryButtonRef.current.disabled) {
+        entryButtonRef.current.focus();
+        focusTransition.current = null;
+      } else if (normalHeadingRef.current) {
+        normalHeadingRef.current.focus();
+        focusTransition.current = null;
+      }
+    }
+    if (transition === "responsive-exit") {
+      const previousTarget = responsiveFocusTarget.current;
+      if (previousTarget && document.contains(previousTarget)) {
+        responsiveFocusTarget.current = null;
+        focusTransition.current = null;
+      } else if (normalHeadingRef.current) {
+        normalHeadingRef.current.focus();
+        responsiveFocusTarget.current = null;
+        focusTransition.current = null;
+      }
+    }
+  }, [detailLoading, isFocusMode]);
 
   useEffect(() => {
     api.missions
@@ -115,19 +161,44 @@ export default function MissionPage() {
     }
   }, [missionKey, loadDetail]);
 
-  // Keyboard shortcuts: R = refresh, D = toggle done visibility
+  const hasCurrentDetail = detail?.epic.key === missionKey && !detailLoading;
+
+  const enterFocusMode = () => {
+    if (!focusSupported || !hasCurrentDetail) return;
+    focusTransition.current = "enter";
+    setIsFocusMode(true);
+  };
+
+  const exitFocusMode = () => {
+    focusTransition.current = "deliberate-exit";
+    setIsFocusMode(false);
+  };
+
+  // Mission shortcuts share one eligibility policy; Escape only closes the active modal.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === "r" || e.key === "R") {
-        if (!selectedStoryKey && missionKey) loadDetail(missionKey);
-      } else if (e.key === "d" || e.key === "D") {
-        setHideDone((prev) => !prev);
+      if (e.key === "Escape" && modal) {
+        setModal(null);
+        return;
+      }
+
+      const shortcut = getMissionShortcut(e, {
+        modalOpen: modal !== null,
+        dragActive,
+        focusMode: isFocusMode,
+        focusSupported,
+        hasCurrentDetail,
+      });
+      if (shortcut === "refresh" && missionKey) loadDetail(missionKey);
+      if (shortcut === "toggle-done") setHideDone((prev) => !prev);
+      if (shortcut === "toggle-focus") {
+        if (isFocusMode) exitFocusMode();
+        else enterFocusMode();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [missionKey, loadDetail, selectedStoryKey]);
+  }, [dragActive, focusSupported, hasCurrentDetail, isFocusMode, loadDetail, missionKey, modal]);
 
   const handleSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const key = e.target.value;
@@ -150,8 +221,6 @@ export default function MissionPage() {
   const sortedSizes = Object.entries(sizeBreakdown).sort(
     ([a], [b]) => sizeOrder(a) - sizeOrder(b),
   );
-  const hasCurrentDetail = detail?.epic.key === missionKey && !detailLoading;
-
   const viewControls = detail ? (
     <div className="flex items-center gap-2">
       <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
@@ -169,8 +238,9 @@ export default function MissionPage() {
       hideDone={hideDone}
       descriptions={milestoneSummaries}
       onStoryUpdated={() => refreshDetail(detail.epic.key)}
-      onStorySelect={setSelectedStoryKey}
-      onEditDescription={isFocusMode || !hasCurrentDetail ? undefined : setEditingSummaryFor}
+      onStorySelect={(storyKey) => setModal({ type: "story", storyKey })}
+      onEditDescription={isFocusMode || !hasCurrentDetail ? undefined : (milestoneName) => setModal({ type: "milestone-description", milestoneName })}
+      onDragActiveChange={setDragActive}
     />
   ) : null;
 
@@ -178,9 +248,9 @@ export default function MissionPage() {
     <div className={`min-h-screen bg-gray-50 ${isFocusMode ? "" : "px-6 py-6"}`}>
       {isFocusMode && detail && (
         <FocusModeChrome
-          identity={<div className="flex min-w-0 items-center gap-2"><JiraLink issueKey={detail.epic.key} /><span className="truncate text-sm font-semibold text-gray-800">{detail.epic.shortName || detail.epic.summary}</span></div>}
+          identity={<h1 ref={focusHeadingRef} tabIndex={-1} className="flex min-w-0 items-center gap-2 outline-none"><JiraLink issueKey={detail.epic.key} /><span className="truncate text-sm font-semibold text-gray-800">{detail.epic.shortName || detail.epic.summary}</span></h1>}
           controls={viewControls}
-          onExit={() => setIsFocusMode(false)}
+          onExit={exitFocusMode}
         />
       )}
 
@@ -208,7 +278,8 @@ export default function MissionPage() {
         {focusSupported && <div className="hidden lg:block">
           <button
             type="button"
-            onClick={() => setIsFocusMode(true)}
+            ref={entryButtonRef}
+            onClick={enterFocusMode}
             disabled={!hasCurrentDetail || !focusSupported}
             aria-keyshortcuts="Z"
             aria-describedby={!hasCurrentDetail ? "focus-mode-disabled-reason" : undefined}
@@ -240,13 +311,13 @@ export default function MissionPage() {
               <JiraLink issueKey={detail.epic.key} />
               {statusBadge(detail.epic.status)}
               <button
-                onClick={() => setEditingCategories(true)}
+                onClick={() => setModal({ type: "categories" })}
                 className="ml-auto text-xs text-gray-400 hover:text-gray-600"
               >
                 Edit categories
               </button>
             </div>
-            <h2 className="mt-2 text-xl font-semibold text-gray-900">{detail.epic.summary}</h2>
+            <h2 ref={normalHeadingRef} tabIndex={-1} className="mt-2 text-xl font-semibold text-gray-900 outline-none">{detail.epic.summary}</h2>
             {detail.epic.shortName && (
               <p className="mt-1 text-sm text-gray-500">{detail.epic.shortName}</p>
             )}
@@ -345,15 +416,16 @@ export default function MissionPage() {
       )}
       </main>
 
-      {selectedStoryKey && (
+      {modal?.type === "story" && (
         <StoryDetailModal
-          storyKey={selectedStoryKey}
+          storyKey={modal.storyKey}
           hideDone={hideDone}
-          onClose={() => setSelectedStoryKey(null)}
+          onClose={() => setModal(null)}
+          closeOnEscape={false}
         />
       )}
 
-      {editingCategories && detail && (
+      {modal?.type === "categories" && detail && (
         <EditCategoriesModal
           epicKey={detail.epic.key}
           initialColumns={detail.epic.columns.map((c) => c.name)}
@@ -361,20 +433,20 @@ export default function MissionPage() {
             await api.missions.updateColumns(detail.epic.key, columns);
             loadDetail(missionKey!);
           }}
-          onClose={() => setEditingCategories(false)}
+          onClose={() => setModal(null)}
         />
       )}
 
-      {editingSummaryFor !== null && detail && (
+      {modal?.type === "milestone-description" && detail && (
         <EditMilestoneSummaryModal
-          milestoneName={editingSummaryFor}
-          currentSummary={milestoneSummaries[editingSummaryFor] ?? ""}
+          milestoneName={modal.milestoneName}
+          currentSummary={milestoneSummaries[modal.milestoneName] ?? ""}
           onSave={async (summary) => {
-            await api.missions.setMilestoneSummary(detail.epic.key, editingSummaryFor, summary);
+            await api.missions.setMilestoneSummary(detail.epic.key, modal.milestoneName, summary);
             const data = await api.missions.getMilestoneSummaries(detail.epic.key);
             setMilestoneSummaries(data.summaries);
           }}
-          onClose={() => setEditingSummaryFor(null)}
+          onClose={() => setModal(null)}
         />
       )}
     </div>

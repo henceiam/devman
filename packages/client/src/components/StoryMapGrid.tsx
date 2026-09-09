@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { DndContext, DragOverlay, useDroppable, type DragEndEvent, type DragStartEvent, closestCenter } from "@dnd-kit/core";
 import type { MissionStory, MissionDetail } from "../api/client";
 import type { MilestoneRow } from "./milestoneProjection";
@@ -13,6 +13,7 @@ interface StoryMapGridProps {
   pendingStoryKeys: ReadonlySet<string>;
   onStorySelect?: (key: string) => void;
   onEditDescription?: (milestoneName: string) => void;
+  onDragActiveChange?: (active: boolean) => void;
 }
 
 /** Encode milestone + column into a droppable ID */
@@ -34,8 +35,10 @@ function DroppableCell({ id, milestone, column, children }: { id: string; milest
   );
 }
 
-export default function StoryMapGrid({ epic, rows, collapsedRows, onToggleRow, onMoveStory, pendingStoryKeys, onStorySelect, onEditDescription }: StoryMapGridProps) {
+export default function StoryMapGrid({ epic, rows, collapsedRows, onToggleRow, onMoveStory, pendingStoryKeys, onStorySelect, onEditDescription, onDragActiveChange }: StoryMapGridProps) {
   const [activeStory, setActiveStory] = useState<MissionStory | null>(null);
+
+  useEffect(() => () => onDragActiveChange?.(false), [onDragActiveChange]);
 
   const columns = epic.columns;
   const columnNames = useMemo(() => {
@@ -65,10 +68,12 @@ export default function StoryMapGrid({ epic, rows, collapsedRows, onToggleRow, o
   const handleDragStart = (event: DragStartEvent) => {
     const story = event.active.data.current?.story as MissionStory | undefined;
     setActiveStory(story ?? null);
+    onDragActiveChange?.(true);
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     setActiveStory(null);
+    onDragActiveChange?.(false);
     const { active, over } = event;
     if (!over) return;
 
@@ -101,6 +106,10 @@ export default function StoryMapGrid({ epic, rows, collapsedRows, onToggleRow, o
       collisionDetection={closestCenter}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
+      onDragCancel={() => {
+        setActiveStory(null);
+        onDragActiveChange?.(false);
+      }}
     >
       <div className="overflow-x-auto">
         <div className="inline-grid min-w-full" style={{ gridTemplateColumns: `140px repeat(${columnNames.length}, minmax(180px, 1fr))` }}>

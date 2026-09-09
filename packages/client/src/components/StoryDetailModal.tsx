@@ -11,6 +11,7 @@ interface StoryDetailModalProps {
   storyKey: string;
   hideDone: boolean;
   onClose: () => void;
+  closeOnEscape?: boolean;
 }
 
 /** Render ADF (Atlassian Document Format) or plain text */
@@ -179,7 +180,7 @@ function SubtaskKanban({ subtasks, hideDone, isEpic }: { subtasks: SubtaskItem[]
   );
 }
 
-export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryDetailModalProps) {
+export default function StoryDetailModal({ storyKey, hideDone, onClose, closeOnEscape = true }: StoryDetailModalProps) {
   const [detail, setDetail] = useState<StoryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -246,14 +247,14 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose }: StoryD
     }
   };
 
-  // Close on Escape
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+    if (!closeOnEscape) return;
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [closeOnEscape, onClose]);
 
   return (
     <div
