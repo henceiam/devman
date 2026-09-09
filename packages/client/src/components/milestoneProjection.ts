@@ -80,7 +80,7 @@ export function projectMilestones({ stories, hideDone, descriptions }: ProjectMi
       milestoneValue: value,
       displayName: value ?? "No milestone",
       ...(number === undefined ? {} : { milestoneNumber: number }),
-      description: value === null ? "" : descriptions[value] ?? "",
+      description: kind === "numbered" && value !== null ? descriptions[value] ?? "" : "",
       allStories,
       visibleStories: hideDone ? allStories.filter((story) => story.statusCategory !== "done") : allStories,
       statusCounts: statusCounts(allStories),
@@ -98,7 +98,7 @@ export function projectMilestones({ stories, hideDone, descriptions }: ProjectMi
 
   const unknownValues = Array.from(groups.keys())
     .filter((value): value is string => value !== null && value !== OUT_OF_SCOPE && milestoneNumber(value) === undefined)
-    .sort((a, b) => a.localeCompare(b));
+    .sort((a, b) => a < b ? -1 : a > b ? 1 : 0);
   for (const value of unknownValues) addRow(value, "unknown");
 
   if (groups.has(OUT_OF_SCOPE)) addRow(OUT_OF_SCOPE, "out-of-scope");

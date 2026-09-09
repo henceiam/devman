@@ -1,4 +1,5 @@
 import { Router, type Request, type Response, type IRouter } from "express";
+import { isMilestoneDescriptionKey } from "../milestoneDescriptions.js";
 import * as missionService from "../services/missions.js";
 
 export const missionsRouter: IRouter = Router();
@@ -27,8 +28,15 @@ missionsRouter.get("/:key/milestone-summaries", async (req: Request<{ key: strin
 
 missionsRouter.put("/:key/milestone-summaries/:milestoneName", async (req: Request<{ key: string; milestoneName: string }>, res: Response) => {
   try {
-    const { summary } = req.body as { summary: string };
-    await missionService.setMilestoneSummary(req.params.key, req.params.milestoneName, summary);
+    const { milestoneName } = req.params;
+    const summary = req.body && typeof req.body === "object"
+      ? (req.body as { summary?: unknown }).summary
+      : undefined;
+    if (!isMilestoneDescriptionKey(milestoneName) || typeof summary !== "string") {
+      res.status(400).json({ error: "Invalid milestone description update" });
+      return;
+    }
+    await missionService.setMilestoneSummary(req.params.key, milestoneName, summary);
     res.status(204).end();
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

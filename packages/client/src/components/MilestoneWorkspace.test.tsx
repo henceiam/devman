@@ -85,4 +85,18 @@ describe("MilestoneWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: "Milestone 1" }));
     expect(screen.getByText("No stories yet")).toBeInTheDocument();
   });
+
+  it("shows an expanded empty planning row without progress", () => {
+    const emptyDetail = detail("MISSION-A");
+    emptyDetail.stories = [];
+
+    render(
+      <MilestoneWorkspace {...defaultProps} detail={emptyDetail} viewMode="list" />,
+    );
+
+    expect(screen.queryByText(/stories?$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/done$/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Milestone 1" }));
+    expect(screen.getByText("No stories yet")).toBeInTheDocument();
+  });
 });

@@ -96,4 +96,96 @@ describe("projectMilestones", () => {
     expect(projectMilestones({ stories: [], hideDone: false, descriptions: {} }).map((row) => row.displayName))
       .toEqual(["Milestone 1", "Milestone 2"]);
   });
+
+  it("treats only exact Milestone 1 through Milestone 10 values as numbered", () => {
+    const malformedValues = [
+      "Milestone 0",
+      "Milestone 01",
+      "Milestone 11",
+      "milestone 1",
+      "Milestone 1 ",
+    ];
+    const rows = projectMilestones({
+      stories: [
+        makeStory({ key: "FIRST", milestone: "Milestone 1" }),
+        makeStory({ key: "LAST", milestone: "Milestone 10" }),
+        ...malformedValues.map((milestone, index) => makeStory({ key: `UNKNOWN-${index}`, milestone })),
+      ],
+      hideDone: false,
+      descriptions: {},
+    });
+
+    expect(rows.filter((row) => row.kind === "numbered").map((row) => row.displayName))
+      .toEqual(["Milestone 1", "Milestone 10"]);
+    expect(rows.filter((row) => row.kind === "unknown").map((row) => row.displayName))
+      .toEqual(["Milestone 0", "Milestone 01", "Milestone 1 ", "Milestone 11", "milestone 1"]);
+  });
+
+  it("caps future milestones at 10 without filling gaps", () => {
+    const rows = projectMilestones({
+      stories: [
+        makeStory({ key: "EARLY", milestone: "Milestone 2" }),
+        makeStory({ key: "LATE", milestone: "Milestone 9" }),
+      ],
+      hideDone: false,
+      descriptions: {},
+    });
+
+    expect(rows.map((row) => row.displayName)).toEqual(["Milestone 2", "Milestone 9", "Milestone 10"]);
+  });
+
+  it("includes described numbered milestones without advancing future synthesis", () => {
+    const rows = projectMilestones({
+      stories: [],
+      hideDone: false,
+      descriptions: { "Milestone 8": "Later planning" },
+    });
+
+    expect(rows.map((row) => row.displayName)).toEqual(["Milestone 1", "Milestone 2", "Milestone 8"]);
+    expect(rows.map((row) => row.synthesized)).toEqual([true, true, false]);
+  });
+
+  it("ignores descriptions stored under malformed, special, and unknown values", () => {
+    const rows = projectMilestones({
+      stories: [
+        makeStory({ key: "NONE", milestone: null }),
+        makeStory({ key: "MALFORMED", milestone: "Milestone 01" }),
+        makeStory({ key: "UNKNOWN", milestone: "Later" }),
+        makeStory({ key: "OUT", milestone: "Out of scope" }),
+      ],
+      hideDone: false,
+      descriptions: {
+        "No milestone": "Invalid special description",
+        "Milestone 01": "Invalid malformed description",
+        Later: "Invalid unknown description",
+        "Out of scope": "Invalid special description",
+      },
+    });
+
+    expect(rows.filter((row) => row.kind !== "numbered").map((row) => ({
+      name: row.displayName,
+      description: row.description,
+      editable: row.descriptionEditable,
+      dropEligible: row.dropEligible,
+    }))).toEqual([
+      { name: "No milestone", description: "", editable: false, dropEligible: true },
+      { name: "Later", description: "", editable: false, dropEligible: false },
+      { name: "Milestone 01", description: "", editable: false, dropEligible: false },
+      { name: "Out of scope", description: "", editable: false, dropEligible: true },
+    ]);
+  });
+
+  it("never creates special or unknown rows from rejected stories", () => {
+    const rows = projectMilestones({
+      stories: [
+        makeStory({ key: "NONE", milestone: null, status: "Rejected" }),
+        makeStory({ key: "UNKNOWN", milestone: "Later", status: "Rejected" }),
+        makeStory({ key: "OUT", milestone: "Out of scope", status: "Rejected" }),
+      ],
+      hideDone: false,
+      descriptions: {},
+    });
+
+    expect(rows.map((row) => row.displayName)).toEqual(["Milestone 1", "Milestone 2"]);
+  });
 });

@@ -31,7 +31,7 @@ export default function EditMilestoneSummaryModal({ milestoneName, currentSummar
     >
       <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-base font-semibold text-gray-900">Edit summary — {milestoneName}</h2>
+          <h2 className="text-base font-semibold text-gray-900">Edit milestone description: {milestoneName}</h2>
           <button
             onClick={onClose}
             className="rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
