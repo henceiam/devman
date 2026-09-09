@@ -31,6 +31,7 @@ interface ProjectMilestonesInput {
 }
 
 const NUMBERED_MILESTONE = /^Milestone ([1-9]|10)$/;
+const UNASSIGNED = "None";
 const OUT_OF_SCOPE = "Out of scope";
 
 function milestoneNumber(value: string): number | undefined {
@@ -53,9 +54,10 @@ export function projectMilestones({ stories, hideDone, descriptions }: ProjectMi
   const groups = new Map<string | null, MissionStory[]>();
 
   for (const story of nonRejectedStories) {
-    const group = groups.get(story.milestone);
+    const milestone = story.milestone === UNASSIGNED ? null : story.milestone;
+    const group = groups.get(milestone);
     if (group) group.push(story);
-    else groups.set(story.milestone, [story]);
+    else groups.set(milestone, [story]);
   }
 
   const usedNumbers = Array.from(groups.keys())

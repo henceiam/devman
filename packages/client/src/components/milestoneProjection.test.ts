@@ -53,6 +53,28 @@ describe("projectMilestones", () => {
     expect(rows[4].dropEligible).toBe(false);
   });
 
+  it("merges Jira None and null into the canonical unassigned row", () => {
+    const nullStory = makeStory({ key: "NULL", milestone: null });
+    const noneStory = makeStory({ key: "NONE", milestone: "None" });
+    const rows = projectMilestones({
+      stories: [nullStory, noneStory],
+      hideDone: false,
+      descriptions: {},
+    });
+
+    expect(rows.filter((row) => row.kind === "unassigned")).toEqual([
+      expect.objectContaining({
+        id: "__unassigned__",
+        milestoneValue: null,
+        displayName: "No milestone",
+        allStories: [nullStory, noneStory],
+        visibleStories: [nullStory, noneStory],
+        dropEligible: true,
+      }),
+    ]);
+    expect(rows.some((row) => row.kind === "unknown" && row.displayName === "None")).toBe(false);
+  });
+
   it("excludes rejected stories before projection and hides Done cards without changing truth", () => {
     const done = makeStory({ key: "DONE", milestone: "Milestone 7", statusCategory: "done" });
     const rows = projectMilestones({
