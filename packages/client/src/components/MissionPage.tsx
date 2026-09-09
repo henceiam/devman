@@ -162,7 +162,8 @@ export default function MissionPage() {
       setDetailLoading(false);
       return { status: "refreshed", detail: refreshedDetail };
     } catch (error) {
-      if (request.id === detailRequestId.current) setDetailLoading(false);
+      if (request.id !== detailRequestId.current) return { status: "superseded" };
+      setDetailLoading(false);
       throw error;
     }
   }, [startDetailRequest]);

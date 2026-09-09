@@ -56,6 +56,10 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMo
     setMapCollapsed(new Set(["Out of scope"]));
   }, [detail.epic.key]);
 
+  useEffect(() => () => {
+    missionGenerationRef.current.generation += 1;
+  }, []);
+
   const stories = moveState.missionKey === detail.epic.key ? moveState.stories : detail.stories;
 
   const projectedRows = useMemo(
