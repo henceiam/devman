@@ -78,7 +78,7 @@ const defaultProps = {
   focusMode: false,
   descriptions: {},
   onStorySelect: vi.fn(),
-  onStoryUpdated: vi.fn(async () => detail("MISSION-A")),
+  onStoryUpdated: vi.fn(async () => ({ status: "refreshed" as const, detail: detail("MISSION-A") })),
   onEditDescription: vi.fn(),
 };
 
@@ -293,7 +293,7 @@ describe("MilestoneWorkspace", () => {
       detail={mission}
       viewMode="map"
       focusMode
-      onStoryUpdated={vi.fn().mockResolvedValue(refreshed)}
+      onStoryUpdated={vi.fn().mockResolvedValue({ status: "refreshed", detail: refreshed })}
     />);
 
     await move("MISSION-A-1", mission.stories[0]);

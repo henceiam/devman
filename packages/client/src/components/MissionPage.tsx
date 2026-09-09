@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router";
 import { api, type MissionSummary, type MissionDetail } from "../api/client";
 import { useAppChrome } from "../AppChrome";
 import JiraLink from "./JiraLink";
-import MilestoneWorkspace from "./MilestoneWorkspace";
+import MilestoneWorkspace, { type StoryRefreshResult } from "./MilestoneWorkspace";
 import StoryDetailModal from "./StoryDetailModal";
 import EditCategoriesModal from "./EditCategoriesModal";
 import EditMilestoneSummaryModal from "./EditMilestoneSummaryModal";
@@ -152,15 +152,15 @@ export default function MissionPage() {
     setDetailLoading(false);
   }, [startDetailRequest]);
 
-  const refreshDetail = useCallback(async (key: string) => {
+  const refreshDetail = useCallback(async (key: string): Promise<StoryRefreshResult> => {
     const request = startDetailRequest(key);
     try {
       const refreshedDetail = await request.response;
-      if (request.id !== detailRequestId.current) throw new Error("Mission changed while refreshing.");
+      if (request.id !== detailRequestId.current) return { status: "superseded" };
       validDetail.current = refreshedDetail;
       setDetail(refreshedDetail);
       setDetailLoading(false);
-      return refreshedDetail;
+      return { status: "refreshed", detail: refreshedDetail };
     } catch (error) {
       if (request.id === detailRequestId.current) setDetailLoading(false);
       throw error;

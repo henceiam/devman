@@ -4,7 +4,7 @@ Date: 2026-09-09
 
 ## Automated Verification
 
-- `pnpm --filter @devman/client test`: passed, 12 files and 104 tests.
+- `pnpm --filter @devman/client test`: passed, 12 files and 108 tests.
 - `pnpm --filter @devman/server test`: passed, 1 file and 12 tests.
 - `pnpm build`: passed for the client and server packages.
 - React lifecycle coverage runs `MissionPage` under Strict Mode and verifies that the media-query and keyboard listeners are cleaned up rather than accumulated.

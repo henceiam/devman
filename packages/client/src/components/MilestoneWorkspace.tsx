@@ -11,11 +11,15 @@ interface MilestoneWorkspaceProps {
   hideDone: boolean;
   focusMode: boolean;
   descriptions: Record<string, string>;
-  onStoryUpdated: () => Promise<MissionDetail>;
+  onStoryUpdated: () => Promise<StoryRefreshResult>;
   onStorySelect?: (key: string) => void;
   onEditDescription?: (milestoneName: string) => void;
   onDragActiveChange?: (active: boolean) => void;
 }
+
+export type StoryRefreshResult =
+  | { status: "refreshed"; detail: MissionDetail }
+  | { status: "superseded" };
 
 export function rowsForWorkspace(rows: MilestoneRow[], focusMode: boolean): MilestoneRow[] {
   return focusMode ? rows.filter((row) => row.visibleStories.length > 0) : rows;
@@ -83,9 +87,9 @@ export default function MilestoneWorkspace({ detail, viewMode, hideDone, focusMo
       await api.missions.updateStory(storyKey, { milestone, category });
       if (!isCurrentGeneration()) return;
       try {
-        const refreshedDetail = await onStoryUpdated();
-        if (isCurrentGeneration()) {
-          dispatchMove({ type: "refresh-success", storyKey, stories: refreshedDetail.stories });
+        const refreshResult = await onStoryUpdated();
+        if (isCurrentGeneration() && refreshResult.status === "refreshed") {
+          dispatchMove({ type: "refresh-success", storyKey, stories: refreshResult.detail.stories });
         }
       } catch {
         if (isCurrentGeneration()) {

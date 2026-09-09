@@ -253,6 +253,49 @@ describe("Mission Focus mode", () => {
     expect(screen.queryByRole("button", { name: "Milestone 1" })).not.toBeInTheDocument();
   });
 
+  it("does not report a superseded post-move refresh as a move failure", async () => {
+    const persistence = deferred<void>();
+    const postMoveRefresh = deferred<MissionDetail>();
+    const manualRefresh = deferred<MissionDetail>();
+    const updateStory = vi.spyOn(api.missions, "updateStory").mockReturnValue(persistence.promise);
+    renderMission();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Enter Focus mode" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Enter Focus mode" }));
+    const initialDetailRequests = vi.mocked(api.missions.getDetail).mock.calls.length;
+    vi.mocked(api.missions.getDetail)
+      .mockReturnValueOnce(postMoveRefresh.promise)
+      .mockReturnValueOnce(manualRefresh.promise);
+
+    const story = mission("MISSION-A").stories[0];
+    act(() => missionDragHandlers.start?.({ active: { id: story.key, data: { current: { story } } } } as unknown as DragStartEvent));
+    act(() => {
+      void missionDragHandlers.end?.({
+        active: { id: story.key },
+        over: { data: { current: { milestone: "Milestone 2", column: "Feature" } } },
+      } as unknown as DragEndEvent);
+    });
+    await waitFor(() => expect(updateStory).toHaveBeenCalledTimes(1));
+
+    await act(async () => persistence.resolve());
+    await waitFor(() => expect(api.missions.getDetail).toHaveBeenCalledTimes(initialDetailRequests + 1));
+    fireEvent.keyDown(window, { key: "r" });
+    await waitFor(() => expect(api.missions.getDetail).toHaveBeenCalledTimes(initialDetailRequests + 2));
+
+    const latestMission = mission("MISSION-A");
+    latestMission.stories[0] = makeStory({
+      key: "MISSION-A-1",
+      summary: "MISSION-A story",
+      milestone: "Milestone 2",
+      category: "Feature",
+    });
+    await act(async () => manualRefresh.resolve(latestMission));
+    await act(async () => postMoveRefresh.resolve(mission("MISSION-A")));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Milestone 2" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Milestone 1" })).not.toBeInTheDocument();
+  });
+
   it("keeps Focus active across view and Mission switches, including replacement loading", async () => {
     const missionBRequest = deferred<MissionDetail>();
     vi.mocked(api.missions.getDetail).mockImplementation((key) => key === "MISSION-B" ? missionBRequest.promise : Promise.resolve(mission(key)));
