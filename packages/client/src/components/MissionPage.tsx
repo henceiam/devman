@@ -63,12 +63,21 @@ export default function MissionPage() {
   const [milestoneSummaries, setMilestoneSummaries] = useState<Record<string, string>>({});
   const [dragActive, setDragActive] = useState(false);
   const detailRequestId = useRef(0);
+  const descriptionRequestId = useRef(0);
+  const missionSession = useRef({ key: missionKey, generation: 0 });
   const validDetail = useRef<MissionDetail | null>(null);
   const entryButtonRef = useRef<HTMLButtonElement>(null);
   const focusHeadingRef = useRef<HTMLHeadingElement>(null);
   const normalHeadingRef = useRef<HTMLHeadingElement>(null);
   const focusTransition = useRef<FocusTransition | null>(null);
   const responsiveFocusTarget = useRef<Element | null>(null);
+
+  if (missionSession.current.key !== missionKey) {
+    missionSession.current = {
+      key: missionKey,
+      generation: missionSession.current.generation + 1,
+    };
+  }
 
   useAppChrome({ headerHidden: isFocusMode });
 
@@ -131,17 +140,28 @@ export default function MissionPage() {
     response: api.missions.getDetail(key),
   }), []);
 
+  const startDescriptionRequest = useCallback((key: string) => ({
+    id: ++descriptionRequestId.current,
+    response: api.missions.getMilestoneSummaries(key),
+  }), []);
+
   const loadDetail = useCallback(async (key: string) => {
     const request = startDetailRequest(key);
+    const descriptionRequest = startDescriptionRequest(key);
+    const session = missionSession.current;
     setDetailLoading(true);
     setError(null);
     setMilestoneSummaries({});
-    void api.missions.getMilestoneSummaries(key).then(
+    void descriptionRequest.response.then(
       (result) => {
-        if (request.id === detailRequestId.current) setMilestoneSummaries(result.summaries);
+        if (descriptionRequest.id === descriptionRequestId.current && session === missionSession.current) {
+          setMilestoneSummaries(result.summaries);
+        }
       },
       () => {
-        if (request.id === detailRequestId.current) setMilestoneSummaries({});
+        if (descriptionRequest.id === descriptionRequestId.current && session === missionSession.current) {
+          setMilestoneSummaries({});
+        }
       },
     );
 
@@ -156,7 +176,7 @@ export default function MissionPage() {
       if (!validDetail.current) setIsFocusMode(false);
     }
     if (request.id === detailRequestId.current) setDetailLoading(false);
-  }, [startDetailRequest]);
+  }, [startDescriptionRequest, startDetailRequest]);
 
   const refreshDetail = useCallback(async (key: string): Promise<StoryRefreshResult> => {
     const request = startDetailRequest(key);
@@ -179,6 +199,7 @@ export default function MissionPage() {
       loadDetail(missionKey);
     } else {
       detailRequestId.current += 1;
+      descriptionRequestId.current += 1;
       validDetail.current = null;
       setDetail(null);
       setDetailLoading(false);
@@ -449,9 +470,16 @@ export default function MissionPage() {
           milestoneName={modal.milestoneName}
           currentSummary={milestoneSummaries[modal.milestoneName] ?? ""}
           onSave={async (summary) => {
-            await api.missions.setMilestoneSummary(detail.epic.key, modal.milestoneName, summary);
-            const data = await api.missions.getMilestoneSummaries(detail.epic.key);
-            setMilestoneSummaries(data.summaries);
+            const key = detail.epic.key;
+            const session = missionSession.current;
+            await api.missions.setMilestoneSummary(key, modal.milestoneName, summary);
+            if (session !== missionSession.current || missionSession.current.key !== key) return;
+
+            const request = startDescriptionRequest(key);
+            const data = await request.response;
+            if (request.id === descriptionRequestId.current && session === missionSession.current) {
+              setMilestoneSummaries(data.summaries);
+            }
           }}
           onClose={() => setModal(null)}
         />

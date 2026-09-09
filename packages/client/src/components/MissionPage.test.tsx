@@ -514,6 +514,59 @@ describe("Mission Focus mode", () => {
     expect(screen.getByText("B description arrived")).toBeInTheDocument();
   });
 
+  it("does not apply an A description save after an A-B-A route session change", async () => {
+    const save = deferred<void>();
+    const setSummary = vi.spyOn(api.missions, "setMilestoneSummary").mockReturnValue(save.promise);
+    vi.mocked(api.missions.getMilestoneSummaries).mockImplementation(async (key) => ({
+      summaries: { "Milestone 1": key === "MISSION-A" ? "A current description" : "B description" },
+    }));
+    const router = renderMission();
+    await screen.findByText("A current description");
+
+    fireEvent.click(screen.getAllByTitle("Edit milestone description")[0]);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "A saved description" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(setSummary).toHaveBeenCalledWith("MISSION-A", "Milestone 1", "A saved description"));
+    const descriptionRequestsBeforeSwitch = vi.mocked(api.missions.getMilestoneSummaries).mock.calls.length;
+
+    await act(async () => router.navigate("/missions/MISSION-B"));
+    await screen.findByText("B description");
+    await act(async () => router.navigate("/missions/MISSION-A"));
+    await screen.findByText("A current description");
+    const descriptionRequestsAfterReturn = vi.mocked(api.missions.getMilestoneSummaries).mock.calls.length;
+    expect(descriptionRequestsAfterReturn).toBeGreaterThan(descriptionRequestsBeforeSwitch);
+
+    await act(async () => save.resolve(undefined));
+    expect(api.missions.getMilestoneSummaries).toHaveBeenCalledTimes(descriptionRequestsAfterReturn);
+    expect(screen.getByText("A current description")).toBeInTheDocument();
+    expect(screen.queryByText("B description")).not.toBeInTheDocument();
+  });
+
+  it("keeps an in-flight description load valid across a post-move detail refresh", async () => {
+    const descriptions = deferred<{ summaries: Record<string, string> }>();
+    const refreshedDetail = deferred<MissionDetail>();
+    vi.mocked(api.missions.getMilestoneSummaries).mockReturnValue(descriptions.promise);
+    vi.spyOn(api.missions, "updateStory").mockResolvedValue(undefined);
+    renderMission();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Enter Focus mode" })).toBeEnabled());
+    const initialDetailRequests = vi.mocked(api.missions.getDetail).mock.calls.length;
+    vi.mocked(api.missions.getDetail).mockReturnValueOnce(refreshedDetail.promise);
+
+    const story = mission("MISSION-A").stories[0];
+    act(() => missionDragHandlers.start?.({ active: { id: story.key, data: { current: { story } } } } as unknown as DragStartEvent));
+    act(() => {
+      void missionDragHandlers.end?.({
+        active: { id: story.key },
+        over: { data: { current: { milestone: "Milestone 2", column: "Feature" } } },
+      } as unknown as DragEndEvent);
+    });
+    await waitFor(() => expect(api.missions.getDetail).toHaveBeenCalledTimes(initialDetailRequests + 1));
+
+    await act(async () => refreshedDetail.resolve(mission("MISSION-A")));
+    await act(async () => descriptions.resolve({ summaries: { "Milestone 1": "Description survived refresh" } }));
+    expect(screen.getByText("Description survived refresh")).toBeInTheDocument();
+  });
+
   it("keeps Focus available when replacement loading fails but valid detail remains", async () => {
     vi.mocked(api.missions.getDetail).mockImplementation((key) => key === "MISSION-B"
       ? Promise.reject(new Error("Replacement failed"))
