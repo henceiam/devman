@@ -1,5 +1,6 @@
 import "./index.css";
 import { BrowserRouter, Routes, Route, NavLink } from "react-router";
+import { AppChromeProvider, useAppChromeState } from "./AppChrome";
 import JiraPanel from "./components/JiraPanel";
 import GitHubPanel from "./components/GitHubPanel";
 import MissionPage from "./components/MissionPage";
@@ -20,11 +21,12 @@ function Dashboard() {
   );
 }
 
-export default function App() {
+export function AppContent() {
+  const { headerHidden } = useAppChromeState();
+
   return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-gray-50">
-        <header className="border-b border-gray-200 bg-white px-6 py-4">
+    <div className="min-h-screen bg-gray-50">
+        {!headerHidden && <header className="border-b border-gray-200 bg-white px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <img src="/favicon.svg" alt="DevMan" className="h-9 w-9" />
@@ -93,7 +95,7 @@ export default function App() {
               </NavLink>
             </nav>
           </div>
-        </header>
+        </header>}
 
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -108,7 +110,16 @@ export default function App() {
             <Route path="unreleased" element={<UnreleasedPullRequestsPage />} />
           </Route>
         </Routes>
-      </div>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppChromeProvider>
+        <AppContent />
+      </AppChromeProvider>
     </BrowserRouter>
   );
 }

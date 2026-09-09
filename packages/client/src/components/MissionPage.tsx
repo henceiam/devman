@@ -1,12 +1,16 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router";
 import { api, type MissionSummary, type MissionDetail } from "../api/client";
+import { useAppChrome } from "../AppChrome";
 import JiraLink from "./JiraLink";
 import MilestoneWorkspace from "./MilestoneWorkspace";
 import StoryDetailModal from "./StoryDetailModal";
 import EditCategoriesModal from "./EditCategoriesModal";
 import EditMilestoneSummaryModal from "./EditMilestoneSummaryModal";
 import { statusBadge } from "./statusUtils";
+import FocusModeChrome from "./FocusModeChrome";
+
+const FOCUS_MEDIA_QUERY = "(min-width: 1024px)";
 
 const COPY_STATUS_COLORS: Record<string, string> = {
   "Copy - ready to start": "bg-sky-100 text-sky-700",
@@ -40,9 +44,26 @@ export default function MissionPage() {
   const [hideDone, setHideDone] = useState(true);
   const [selectedStoryKey, setSelectedStoryKey] = useState<string | null>(null);
   const [editingCategories, setEditingCategories] = useState(false);
-  const [headerExpanded, setHeaderExpanded] = useState(true);
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const [focusSupported, setFocusSupported] = useState(() => window.matchMedia(FOCUS_MEDIA_QUERY).matches);
   const [milestoneSummaries, setMilestoneSummaries] = useState<Record<string, string>>({});
   const [editingSummaryFor, setEditingSummaryFor] = useState<string | null>(null);
+  const detailRequestId = useRef(0);
+  const validDetail = useRef<MissionDetail | null>(null);
+
+  useAppChrome({ headerHidden: isFocusMode });
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(FOCUS_MEDIA_QUERY);
+    const handleChange = (event: MediaQueryListEvent) => {
+      setFocusSupported(event.matches);
+      if (!event.matches) setIsFocusMode(false);
+    };
+
+    setFocusSupported(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
 
   useEffect(() => {
     api.missions
@@ -52,22 +73,32 @@ export default function MissionPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const loadDetail = useCallback((key: string) => {
+  const loadDetail = useCallback(async (key: string) => {
+    const requestId = ++detailRequestId.current;
     setDetailLoading(true);
     setError(null);
-    api.missions
-      .getDetail(key)
-      .then(setDetail)
-      .catch((e) => setError(e.message))
-      .finally(() => setDetailLoading(false));
-    api.missions
-      .getMilestoneSummaries(key)
-      .then((data) => setMilestoneSummaries(data.summaries))
-      .catch(() => setMilestoneSummaries({}));
+    const [detailResult, summariesResult] = await Promise.allSettled([
+      api.missions.getDetail(key),
+      api.missions.getMilestoneSummaries(key),
+    ]);
+    if (requestId !== detailRequestId.current) return;
+
+    if (detailResult.status === "fulfilled") {
+      validDetail.current = detailResult.value;
+      setDetail(detailResult.value);
+      setMilestoneSummaries(summariesResult.status === "fulfilled" ? summariesResult.value.summaries : {});
+    } else {
+      setError(detailResult.reason instanceof Error ? detailResult.reason.message : "Failed to load Mission details.");
+      if (!validDetail.current) setIsFocusMode(false);
+    }
+    setDetailLoading(false);
   }, []);
 
   const refreshDetail = useCallback(async (key: string) => {
+    const requestId = detailRequestId.current;
     const refreshedDetail = await api.missions.getDetail(key);
+    if (requestId !== detailRequestId.current) throw new Error("Mission changed while refreshing.");
+    validDetail.current = refreshedDetail;
     setDetail(refreshedDetail);
     return refreshedDetail;
   }, []);
@@ -76,7 +107,11 @@ export default function MissionPage() {
     if (missionKey) {
       loadDetail(missionKey);
     } else {
+      detailRequestId.current += 1;
+      validDetail.current = null;
       setDetail(null);
+      setDetailLoading(false);
+      setIsFocusMode(false);
     }
   }, [missionKey, loadDetail]);
 
@@ -115,12 +150,42 @@ export default function MissionPage() {
   const sortedSizes = Object.entries(sizeBreakdown).sort(
     ([a], [b]) => sizeOrder(a) - sizeOrder(b),
   );
+  const hasCurrentDetail = detail?.epic.key === missionKey && !detailLoading;
 
+  const viewControls = detail ? (
+    <div className="flex items-center gap-2">
+      <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+        <button onClick={() => setViewMode("list")} className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${viewMode === "list" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>List</button>
+        <button onClick={() => setViewMode("map")} className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${viewMode === "map" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}>Story Map</button>
+      </div>
+      {hideDone && <span className="whitespace-nowrap rounded bg-yellow-100 px-1.5 py-0.5 text-[11px] text-yellow-700">Done hidden</span>}
+    </div>
+  ) : null;
+
+  const workspace = detail && !detailLoading ? (
+    <MilestoneWorkspace
+      detail={detail}
+      viewMode={viewMode}
+      hideDone={hideDone}
+      descriptions={milestoneSummaries}
+      onStoryUpdated={() => refreshDetail(detail.epic.key)}
+      onStorySelect={setSelectedStoryKey}
+      onEditDescription={isFocusMode || !hasCurrentDetail ? undefined : setEditingSummaryFor}
+    />
+  ) : null;
 
   return (
-    <div className="mx-auto w-full px-6 py-6">
+    <div className={`min-h-screen bg-gray-50 ${isFocusMode ? "" : "px-6 py-6"}`}>
+      {isFocusMode && detail && (
+        <FocusModeChrome
+          identity={<div className="flex min-w-0 items-center gap-2"><JiraLink issueKey={detail.epic.key} /><span className="truncate text-sm font-semibold text-gray-800">{detail.epic.shortName || detail.epic.summary}</span></div>}
+          controls={viewControls}
+          onExit={() => setIsFocusMode(false)}
+        />
+      )}
+
+      {!isFocusMode && <>
       <div className="mb-6 flex items-center justify-between gap-4">
-        {headerExpanded ? (
           <div className="flex items-center gap-4">
             <label htmlFor="mission-select" className="text-sm font-medium text-gray-700">
               Mission
@@ -140,38 +205,24 @@ export default function MissionPage() {
               ))}
             </select>
           </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            {detail ? (
-              <>
-                <JiraLink issueKey={detail.epic.key} />
-                <span className="text-sm font-medium text-gray-700">{detail.epic.summary}</span>
-              </>
-            ) : (
-              <span className="text-sm text-gray-400">No mission selected</span>
-            )}
-          </div>
-        )}
-        {(detail || !headerExpanded) && (
+        {focusSupported && <div className="hidden lg:block">
           <button
-            onClick={() => setHeaderExpanded((prev) => !prev)}
-            aria-expanded={headerExpanded}
-            className="flex items-center text-gray-400 hover:text-gray-600"
+            type="button"
+            onClick={() => setIsFocusMode(true)}
+            disabled={!hasCurrentDetail || !focusSupported}
+            aria-keyshortcuts="Z"
+            aria-describedby={!hasCurrentDetail ? "focus-mode-disabled-reason" : undefined}
+            className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-600 shadow-sm hover:border-gray-400 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className={`h-5 w-5 transition-transform ${headerExpanded ? "rotate-0" : "rotate-180"}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-            </svg>
+            <span>Enter Focus mode</span>
+            <kbd aria-hidden="true" className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-xs">Z</kbd>
           </button>
-        )}
+          {!hasCurrentDetail && <p id="focus-mode-disabled-reason" className="mt-1 text-xs text-gray-500">Available after Mission details load.</p>}
+        </div>}
       </div>
+      </>}
 
+      <main className={isFocusMode ? "px-6 py-6 pb-20" : ""}>
       {error && (
         <div className="mb-4 rounded bg-red-50 p-3 text-sm text-red-700">{error}</div>
       )}
@@ -182,8 +233,7 @@ export default function MissionPage() {
 
       {detail && !detailLoading && (
         <div className="space-y-6">
-          {headerExpanded && (
-            <>
+          {!isFocusMode && <>
           {/* Epic header */}
           <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
             <div className="flex items-center gap-3">
@@ -257,11 +307,9 @@ export default function MissionPage() {
               </div>
             </div>
           </div>
-            </>
-          )}
-
+          </>}
           {/* View toggle + content */}
-          <div className="flex items-center gap-4">
+          {!isFocusMode && <div className="flex items-center gap-4">
             {detail.epic.columns.length > 0 && (
               <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
                 <button
@@ -290,19 +338,12 @@ export default function MissionPage() {
               <kbd className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5">R</kbd> refresh
               <kbd className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5">D</kbd> toggle done
             </span>
-          </div>
+          </div>}
 
-          <MilestoneWorkspace
-            detail={detail}
-            viewMode={viewMode}
-            hideDone={hideDone}
-            descriptions={milestoneSummaries}
-            onStoryUpdated={() => refreshDetail(missionKey!)}
-            onStorySelect={setSelectedStoryKey}
-            onEditDescription={setEditingSummaryFor}
-          />
+          {workspace}
         </div>
       )}
+      </main>
 
       {selectedStoryKey && (
         <StoryDetailModal
@@ -324,13 +365,13 @@ export default function MissionPage() {
         />
       )}
 
-      {editingSummaryFor !== null && missionKey && (
+      {editingSummaryFor !== null && detail && (
         <EditMilestoneSummaryModal
           milestoneName={editingSummaryFor}
           currentSummary={milestoneSummaries[editingSummaryFor] ?? ""}
           onSave={async (summary) => {
-            await api.missions.setMilestoneSummary(missionKey, editingSummaryFor, summary);
-            const data = await api.missions.getMilestoneSummaries(missionKey);
+            await api.missions.setMilestoneSummary(detail.epic.key, editingSummaryFor, summary);
+            const data = await api.missions.getMilestoneSummaries(detail.epic.key);
             setMilestoneSummaries(data.summaries);
           }}
           onClose={() => setEditingSummaryFor(null)}
