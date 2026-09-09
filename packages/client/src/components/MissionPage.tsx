@@ -126,15 +126,20 @@ export default function MissionPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const startDetailRequest = useCallback((key: string) => ({
+    id: ++detailRequestId.current,
+    response: api.missions.getDetail(key),
+  }), []);
+
   const loadDetail = useCallback(async (key: string) => {
-    const requestId = ++detailRequestId.current;
+    const request = startDetailRequest(key);
     setDetailLoading(true);
     setError(null);
     const [detailResult, summariesResult] = await Promise.allSettled([
-      api.missions.getDetail(key),
+      request.response,
       api.missions.getMilestoneSummaries(key),
     ]);
-    if (requestId !== detailRequestId.current) return;
+    if (request.id !== detailRequestId.current) return;
 
     if (detailResult.status === "fulfilled") {
       validDetail.current = detailResult.value;
@@ -145,16 +150,22 @@ export default function MissionPage() {
       if (!validDetail.current) setIsFocusMode(false);
     }
     setDetailLoading(false);
-  }, []);
+  }, [startDetailRequest]);
 
   const refreshDetail = useCallback(async (key: string) => {
-    const requestId = detailRequestId.current;
-    const refreshedDetail = await api.missions.getDetail(key);
-    if (requestId !== detailRequestId.current) throw new Error("Mission changed while refreshing.");
-    validDetail.current = refreshedDetail;
-    setDetail(refreshedDetail);
-    return refreshedDetail;
-  }, []);
+    const request = startDetailRequest(key);
+    try {
+      const refreshedDetail = await request.response;
+      if (request.id !== detailRequestId.current) throw new Error("Mission changed while refreshing.");
+      validDetail.current = refreshedDetail;
+      setDetail(refreshedDetail);
+      setDetailLoading(false);
+      return refreshedDetail;
+    } catch (error) {
+      if (request.id === detailRequestId.current) setDetailLoading(false);
+      throw error;
+    }
+  }, [startDetailRequest]);
 
   useEffect(() => {
     if (missionKey) {

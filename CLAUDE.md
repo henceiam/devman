@@ -27,9 +27,12 @@ pnpm --filter @devman/client test          # run once
 pnpm --filter @devman/client test:watch    # watch mode
 pnpm --filter @devman/client exec vitest run src/components/statusUtils.test.ts   # single file
 pnpm --filter @devman/client exec vitest run -t "returns short name"              # single test by name
+
+# Server tests (vitest)
+pnpm --filter @devman/server test
 ```
 
-There is no test suite for the server package, and no lint script is wired up in either package despite the root `pnpm lint` script existing.
+No lint script is wired up in either package despite the root `pnpm lint` script existing.
 
 The client dev server proxies `/api` requests to the server (see `packages/client/vite.config.ts`), so during development always open `http://localhost:5173`, not the server port directly.
 
