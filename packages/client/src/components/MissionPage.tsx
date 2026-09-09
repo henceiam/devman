@@ -1,9 +1,8 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router";
-import { api, type MissionSummary, type MissionStory, type MissionDetail } from "../api/client";
+import { api, type MissionSummary, type MissionDetail } from "../api/client";
 import JiraLink from "./JiraLink";
-import MilestoneGroup from "./MilestoneGroup";
-import StoryMapGrid from "./StoryMapGrid";
+import MilestoneWorkspace from "./MilestoneWorkspace";
 import StoryDetailModal from "./StoryDetailModal";
 import EditCategoriesModal from "./EditCategoriesModal";
 import EditMilestoneSummaryModal from "./EditMilestoneSummaryModal";
@@ -67,6 +66,12 @@ export default function MissionPage() {
       .catch(() => setMilestoneSummaries({}));
   }, []);
 
+  const refreshDetail = useCallback(async (key: string) => {
+    const refreshedDetail = await api.missions.getDetail(key);
+    setDetail(refreshedDetail);
+    return refreshedDetail;
+  }, []);
+
   useEffect(() => {
     if (missionKey) {
       loadDetail(missionKey);
@@ -97,11 +102,6 @@ export default function MissionPage() {
   // All non-rejected stories (for statistics)
   const allStories = detail?.stories ?? [];
   const stories = allStories.filter((s) => s.status !== "Rejected");
-  // Visible stories (optionally hides done — for cards/grid only)
-  const visibleStories = hideDone
-    ? stories.filter((s) => s.statusCategory !== "done")
-    : stories;
-
   const statusBreakdown = stories.reduce<Record<string, number>>((acc, s) => {
     const cat = categoryLabel(s.statusCategory);
     acc[cat] = (acc[cat] ?? 0) + 1;
@@ -116,29 +116,6 @@ export default function MissionPage() {
     ([a], [b]) => sizeOrder(a) - sizeOrder(b),
   );
 
-  // Group stories by milestone, sorted: No milestone → Milestone 1-10 → Out of scope
-  const milestoneGroups = useMemo(() => {
-    const groups = new Map<string, MissionStory[]>();
-    for (const story of visibleStories) {
-      const key = story.milestone ?? "No milestone";
-      const list = groups.get(key);
-      if (list) {
-        list.push(story);
-      } else {
-        groups.set(key, [story]);
-      }
-    }
-
-    const milestoneOrder = (name: string): number => {
-      if (name === "No milestone") return -1;
-      if (name === "Out of scope") return 100;
-      const match = name.match(/^Milestone\s+(\d+)$/i);
-      return match ? parseInt(match[1], 10) : 50;
-    };
-
-    return Array.from(groups.entries())
-      .sort(([a], [b]) => milestoneOrder(a) - milestoneOrder(b));
-  }, [visibleStories]);
 
   return (
     <div className="mx-auto w-full px-6 py-6">
@@ -315,21 +292,15 @@ export default function MissionPage() {
             </span>
           </div>
 
-          {viewMode === "list" ? (
-            <div className="space-y-3">
-              {milestoneGroups.map(([name, groupStories]) => (
-                <MilestoneGroup key={name} name={name} stories={groupStories} onStorySelect={setSelectedStoryKey} summary={milestoneSummaries[name]} onEditSummary={() => setEditingSummaryFor(name)} />
-              ))}
-            </div>
-          ) : (
-            <StoryMapGrid
-              detail={{ ...detail, stories: visibleStories }}
-              onStoryUpdated={() => loadDetail(missionKey!)}
-              onStorySelect={setSelectedStoryKey}
-              milestoneSummaries={milestoneSummaries}
-              onEditSummary={(name) => setEditingSummaryFor(name)}
-            />
-          )}
+          <MilestoneWorkspace
+            detail={detail}
+            viewMode={viewMode}
+            hideDone={hideDone}
+            descriptions={milestoneSummaries}
+            onStoryUpdated={() => refreshDetail(missionKey!)}
+            onStorySelect={setSelectedStoryKey}
+            onEditDescription={setEditingSummaryFor}
+          />
         </div>
       )}
 

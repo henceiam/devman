@@ -9,6 +9,7 @@ import JiraLink from "./JiraLink";
 interface StoryCardProps {
   story: MissionStory;
   onSelect?: (key: string) => void;
+  dragDisabled?: boolean;
 }
 
 function initials(name: string): string {
@@ -20,10 +21,11 @@ function initials(name: string): string {
     .slice(0, 2);
 }
 
-export default function StoryCard({ story, onSelect }: StoryCardProps) {
+export default function StoryCard({ story, onSelect, dragDisabled = false }: StoryCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: story.key,
     data: { story },
+    disabled: dragDisabled,
   });
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const { dotColor, bgColor } = getStatusStyle(story.status);
@@ -60,7 +62,7 @@ export default function StoryCard({ story, onSelect }: StoryCardProps) {
         (listeners as Record<string, (e: React.PointerEvent) => void>)?.onPointerDown?.(e);
       }}
       onPointerUp={handlePointerUp}
-      className={`rounded-md border p-2 shadow-sm transition cursor-grab active:cursor-grabbing ${
+      className={`rounded-md border p-2 shadow-sm transition ${dragDisabled ? "cursor-not-allowed opacity-60" : "cursor-grab active:cursor-grabbing"} ${
         isDragging ? "opacity-50 shadow-lg ring-2 ring-blue-300" : "border-gray-200 hover:shadow-md"
       }`}
     >
