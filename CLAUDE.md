@@ -67,7 +67,7 @@ Monorepo with two pnpm workspace packages: `@devman/server` (Express 5 + TypeScr
 
 This is undocumented tribal knowledge that isn't discoverable from Jira's UI. The full reference lives in [.github/instructions/domain-logic.instructions.md](.github/instructions/domain-logic.instructions.md) — consult it before changing anything that reads or writes these fields. Key points:
 
-- Custom field IDs (`customfield_10000` = embedded PR/dev-info JSON, `customfield_11302` = Copy/Translation Status, `customfield_11357` = T-shirt size, `customfield_11465` = Hidden Date, `customfield_11477` = Milestone, `customfield_11487` = Category/Mapping config) only apply to the `EBBACKLOG` project. Other projects use standard fields only.
+- Custom field IDs (`customfield_10000` = embedded PR/dev-info JSON, `customfield_11285` = Translation keys (ADF textarea), `customfield_11302` = Copy/Translation Status, `customfield_11357` = T-shirt size, `customfield_11465` = Hidden Date, `customfield_11477` = Milestone, `customfield_11487` = Category/Mapping config) only apply to the `EBBACKLOG` project. Other projects use standard fields only.
 - **PR state parsing** from `customfield_10000` follows a strict priority order (PR stateCount → fallback pullrequest= → branch= → null) — see the doc for the exact algorithm. When the GitHub API call fails (e.g. private repo), fall back to building a `PrDetail` from the Jira dev-status data rather than returning null.
 - **Jira search**: always use `searchForIssuesUsingJqlEnhancedSearch` — the older `searchForIssuesUsingJql` returns HTTP 410 Gone.
 - **GitHub reviewers**: use `listRequestedReviewers` — `listReviewRequests` does not exist on the Octokit client.

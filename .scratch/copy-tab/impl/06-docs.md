@@ -1,7 +1,7 @@
 # Impl T6 — Docs: residual TOCTOU race + domain field updates
 
 Type: implementation
-Status: ready-for-agent
+Status: completed
 Blocked by: 01
 
 ## Scope
@@ -20,4 +20,9 @@ Documentation only. Implements spec acceptance criterion 10 and keeps CLAUDE.md/
 
 ## Completion
 
-Report the commit hash.
+Commit: `3c29873` — docs: document customfield_11285 init guard + residual TOCTOU race
+
+- Verified T1 implementation in `packages/server/src/services/missions.ts`: `customfield_11285` rendered read-only when populated (`buildIssueCopyData`), `initializeTranslationKeys` guarded by EBBACKLOG project + `copy`/`copy-clinical` label check with an "already-initialized" short-circuit, and best-effort (read → empty-check → `editIssue` write → re-read) — Jira has no compare-and-set, so a residual TOCTOU race remains.
+- `.github/instructions/domain-logic.instructions.md`: row for `customfield_11285` updated to flag initialization as best-effort; new "Translation keys initialization" note in Scope & Behavior Notes documenting the non-atomic, residual TOCTOU race.
+- `CLAUDE.md`: added `customfield_11285` = Translation keys (ADF textarea) to the field-ID list (one line, in place).
+- `pnpm build` passes (server tsc + client tsc -b && vite build).
