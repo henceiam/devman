@@ -23,10 +23,10 @@ Closes:
 
 | # | Ticket | Blocked by | Status |
 |---|--------|-----------|--------|
-| T1 | `impl/01-server-contract.md` — server read contract + initialize endpoint | — | in progress |
-| T2 | `impl/02-client-api.md` — ApiError + client types + endpoint wrapper | — | in progress |
-| T3 | `impl/03-adf-table-rendering.md` — table cases in renderAdfNode + tests | — | in progress |
-| T4 | `impl/04-copy-status-badge.md` — copyStatusBadge + tests | — | in progress |
+| T1 | `impl/01-server-contract.md` — server read contract + initialize endpoint | — | merged |
+| T2 | `impl/02-client-api.md` — ApiError + client types + endpoint wrapper | — | merged |
+| T3 | `impl/03-adf-table-rendering.md` — table cases in renderAdfNode + tests | — | merged |
+| T4 | `impl/04-copy-status-badge.md` — copyStatusBadge + tests | — | merged |
 | T5 | `impl/05-copy-tab-component.md` — CopyTab + modal wiring + tests | T1, T2, T3, T4 | blocked |
 | T6 | `impl/06-docs.md` — TOCTOU + domain docs | T1 | blocked |
 
