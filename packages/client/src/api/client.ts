@@ -1,10 +1,20 @@
 const API_BASE = "/api";
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public body: unknown,
+  ) {
+    super(message);
+  }
+}
+
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `API error: ${res.status}`);
+    throw new ApiError((body as { error?: string }).error || `API error: ${res.status}`, res.status, body);
   }
   return res.json();
 }
@@ -188,6 +198,31 @@ export interface CommentItem {
   updated: string;
 }
 
+export interface AdfNode {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: AdfNode[];
+  text?: string;
+  marks?: Array<{ type: string; attrs?: Record<string, unknown> }>;
+  [key: string]: unknown;
+}
+
+export interface AdfDocument extends AdfNode {
+  type: "doc";
+  version: 1;
+  content: AdfNode[];
+}
+
+export interface IssueCopyData {
+  status: string | null;
+  translationKeys: AdfDocument | null;
+  translationKeysState: "empty" | "initialized";
+}
+
+export type InitializeTranslationKeysResponse =
+  | { outcome: "initialized"; copy: IssueCopyData }
+  | { outcome: "already-initialized"; copy: IssueCopyData };
+
 export interface StoryDetailResponse {
   key: string;
   summary: string;
@@ -200,6 +235,7 @@ export interface StoryDetailResponse {
   subtasks: SubtaskItem[];
   prState: PrState | null;
   labels: string[];
+  copy: IssueCopyData;
 }
 
 export interface LinkedSupportTicket {
@@ -297,7 +333,7 @@ export const api = {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || `API error: ${res.status}`);
+        throw new ApiError(body.error || `API error: ${res.status}`, res.status, body);
       }
       return res.json();
     },
@@ -309,6 +345,17 @@ export const api = {
       fetchJson<WayfinderResponse>(`/missions/stories/${encodeURIComponent(storyKey)}/wayfinder`),
     getStoryComments: (storyKey: string) =>
       fetchJson<{ comments: CommentItem[] }>(`/missions/stories/${encodeURIComponent(storyKey)}/comments`),
+    initializeTranslationKeys: async (issueKey: string): Promise<InitializeTranslationKeysResponse> => {
+      const res = await fetch(
+        `${API_BASE}/missions/issues/${encodeURIComponent(issueKey)}/copy/translation-keys/initialize`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new ApiError((body as { error?: string }).error || `API error: ${res.status}`, res.status, body);
+      }
+      return res.json();
+    },
     updateColumns: async (epicKey: string, columns: string[]): Promise<void> => {
       const res = await fetch(`${API_BASE}/missions/${encodeURIComponent(epicKey)}/columns`, {
         method: "PATCH",
@@ -317,7 +364,7 @@ export const api = {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || `API error: ${res.status}`);
+        throw new ApiError((body as { error?: string }).error || `API error: ${res.status}`, res.status, body);
       }
     },
     getMilestoneSummaries: (epicKey: string) =>
@@ -335,7 +382,7 @@ export const api = {
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error((body as { error?: string }).error ?? res.statusText);
+        throw new ApiError((body as { error?: string }).error ?? res.statusText, res.status, body);
       }
     },
   },
@@ -352,7 +399,7 @@ export const api = {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || `API error: ${res.status}`);
+        throw new ApiError((body as { error?: string }).error || `API error: ${res.status}`, res.status, body);
       }
     },
   },
@@ -369,7 +416,7 @@ export const api = {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error || `API error: ${res.status}`);
+        throw new ApiError((body as { error?: string }).error || `API error: ${res.status}`, res.status, body);
       }
     },
   },

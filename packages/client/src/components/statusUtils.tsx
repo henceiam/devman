@@ -41,6 +41,11 @@ export function statusBadge(status: string) {
   return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{displayStatus(status)}</span>;
 }
 
+export function copyStatusBadge(status: string) {
+  const cls = COPY_STATUS_COLORS[status] ?? "bg-gray-100 text-gray-600";
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>{status}</span>;
+}
+
 /**
  * Full CSS named colors per status, matching domain-logic.instructions.md.
  * "white"-statuses use a gray dot (visible on white bg) with a near-invisible tint.

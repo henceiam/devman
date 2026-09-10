@@ -84,6 +84,31 @@ export interface CommentItem {
   updated: string;
 }
 
+export interface AdfNode {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: AdfNode[];
+  text?: string;
+  marks?: Array<{ type: string; attrs?: Record<string, unknown> }>;
+  [key: string]: unknown;
+}
+
+export interface AdfDocument extends AdfNode {
+  type: "doc";
+  version: 1;
+  content: AdfNode[];
+}
+
+export interface IssueCopyData {
+  status: string | null;
+  translationKeys: AdfDocument | null;
+  translationKeysState: "empty" | "initialized";
+}
+
+export type InitializeTranslationKeysResponse =
+  | { outcome: "initialized"; copy: IssueCopyData }
+  | { outcome: "already-initialized"; copy: IssueCopyData };
+
 export interface StoryDetailResponse {
   key: string;
   summary: string;
@@ -96,6 +121,7 @@ export interface StoryDetailResponse {
   subtasks: SubtaskItem[];
   prState: PrState | null;
   labels: string[];
+  copy: IssueCopyData;
 }
 
 export type WayfinderTicketType = "research" | "prototype" | "grilling" | "task" | null;
@@ -420,7 +446,7 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
   const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
     jql: `key = "${issueKey}"`,
     maxResults: 1,
-    fields: ["summary", "status", "issuetype", "description", "subtasks", "customfield_11101", "customfield_10000", "customfield_11461", "labels"],
+    fields: ["summary", "status", "issuetype", "description", "subtasks", "customfield_11101", "customfield_10000", "customfield_11461", "labels", "customfield_11302", "customfield_11285"],
   });
 
   const issue = result.issues?.[0];
@@ -495,7 +521,44 @@ export async function getStoryDetail(issueKey: string): Promise<StoryDetailRespo
     subtasks,
     prState: parsePrField(fields.customfield_10000 as string | null),
     labels: (fields.labels as string[] | null) ?? [],
+    copy: buildIssueCopyData(fields),
   };
+}
+
+/** Build IssueCopyData from a Jira issue's raw fields (customfield_11302 + customfield_11285). */
+function buildIssueCopyData(fields: Record<string, unknown>): IssueCopyData {
+  const status = (fields.customfield_11302 as { value: string } | null)?.value ?? null;
+  const raw = fields.customfield_11285;
+  const translationKeys = isValidAdfDocument(raw) && hasMeaningfulAdfContent(raw.content) ? raw : null;
+  return {
+    status,
+    translationKeys,
+    translationKeysState: translationKeys ? "initialized" : "empty",
+  };
+}
+
+/** Validate only the ADF invariants DevMan relies on: a `doc` root, `version` 1, array `content`. */
+function isValidAdfDocument(raw: unknown): raw is AdfDocument {
+  if (!raw || typeof raw !== "object") return false;
+  const doc = raw as Record<string, unknown>;
+  return doc.type === "doc" && doc.version === 1 && Array.isArray(doc.content);
+}
+
+/** "Structurally contentless" = empty content array, or only `paragraph`/`doc` containers
+ * with no meaningful descendants. EVERY other node type is meaningful — including tables
+ * (even with all-blank cells) and non-text leaf nodes like `inlineCard`, `mention`, or
+ * `mediaSingle` — so a doc containing only such nodes counts as initialized and is never
+ * overwritten by initialize. (Allowlist of contentless types, not a denylist.) */
+export function hasMeaningfulAdfContent(content: AdfNode[]): boolean {
+  return content.some(nodeHasMeaningfulContent);
+}
+
+function nodeHasMeaningfulContent(node: AdfNode): boolean {
+  if (typeof node.text === "string") return node.text.length > 0;
+  if (node.type === "paragraph" || node.type === "doc") {
+    return Array.isArray(node.content) && hasMeaningfulAdfContent(node.content);
+  }
+  return true;
 }
 
 // "Blocks" link type is admin-editable per Jira instance; this id was confirmed live
@@ -784,4 +847,284 @@ export async function getStoryGithub(issueKey: string): Promise<StoryGitHubRespo
     prs: prDetails.filter((p): p is PrDetail => p !== null),
     hasBranch,
   };
+}
+
+// ---- Copy tab: Translation keys initialization ----
+
+export class IssueNotFoundError extends Error {
+  readonly code = "NOT_FOUND" as const;
+  constructor(issueKey: string) {
+    super(`Issue not found: ${issueKey}`);
+    this.name = "IssueNotFoundError";
+  }
+}
+
+export class CopyIneligibleError extends Error {
+  readonly code = "INELIGIBLE" as const;
+  constructor(issueKey: string) {
+    super(
+      `Issue ${issueKey} is not eligible for translation keys initialization ` +
+        `(must be in project ${MISSION_PROJECT} and carry the label "copy" or "copy-clinical")`,
+    );
+    this.name = "CopyIneligibleError";
+  }
+}
+
+export class TranslationKeysUpstreamError extends Error {
+  readonly code = "UPSTREAM" as const;
+  constructor(issueKey: string) {
+    super(`Jira did not store the translation keys template for ${issueKey}`);
+    this.name = "TranslationKeysUpstreamError";
+  }
+}
+
+// Canonical Translation keys template derived from EBBACKLOG-25185
+// (.scratch/copy-tab/research/reference-table-and-field-schema.md), reproduced
+// exactly including all Jira-generated localId values.
+const TRANSLATION_KEYS_TEMPLATE: AdfDocument = {
+  type: "doc",
+  version: 1,
+  content: [
+    {
+      type: "table",
+      attrs: {
+        isNumberColumnEnabled: false,
+        layout: "align-start",
+        localId: "46a8212e-4198-49ea-b8ab-dcdccc1d44ae",
+      },
+      content: [
+        {
+          type: "tableRow",
+          attrs: {
+            localId: "a5f10b88e85a",
+          },
+          content: [
+            {
+              type: "tableHeader",
+              attrs: {
+                localId: "f523629022e3",
+              },
+              content: [
+                {
+                  type: "paragraph",
+                  content: [
+                    {
+                      type: "text",
+                      text: "Key",
+                      marks: [
+                        {
+                          type: "strong",
+                        },
+                      ],
+                    },
+                  ],
+                  attrs: {
+                    localId: "27be9aa11183",
+                  },
+                },
+              ],
+            },
+            {
+              type: "tableHeader",
+              attrs: {
+                localId: "f9f715caeab5",
+              },
+              content: [
+                {
+                  type: "paragraph",
+                  content: [
+                    {
+                      type: "text",
+                      text: "Copy",
+                      marks: [
+                        {
+                          type: "strong",
+                        },
+                      ],
+                    },
+                  ],
+                  attrs: {
+                    localId: "e1e0b474cbbd",
+                  },
+                },
+              ],
+            },
+            {
+              type: "tableHeader",
+              attrs: {
+                localId: "4b4e00466479",
+              },
+              content: [
+                {
+                  type: "paragraph",
+                  content: [
+                    {
+                      type: "text",
+                      text: "Comment",
+                      marks: [
+                        {
+                          type: "strong",
+                        },
+                      ],
+                    },
+                  ],
+                  attrs: {
+                    localId: "90ee91169cf2",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "tableRow",
+          attrs: {
+            localId: "0f1dc4ec63c4",
+          },
+          content: [
+            {
+              type: "tableCell",
+              attrs: {
+                localId: "0bb5a1f4b9ca",
+              },
+              content: [
+                {
+                  type: "paragraph",
+                  attrs: {
+                    localId: "7c085926c93f",
+                  },
+                },
+              ],
+            },
+            {
+              type: "tableCell",
+              attrs: {
+                localId: "05a629f416d2",
+              },
+              content: [
+                {
+                  type: "paragraph",
+                  attrs: {
+                    localId: "5783200410c9",
+                  },
+                },
+              ],
+            },
+            {
+              type: "tableCell",
+              attrs: {
+                localId: "f99690030059",
+              },
+              content: [
+                {
+                  type: "paragraph",
+                  attrs: {
+                    localId: "a9dabd6477d6",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        {
+          type: "tableRow",
+          attrs: {
+            localId: "505928dcccfb",
+          },
+          content: [
+            {
+              type: "tableCell",
+              attrs: {
+                localId: "a8b1b2429c09",
+              },
+              content: [
+                {
+                  type: "paragraph",
+                  attrs: {
+                    localId: "c9e0aebfa61a",
+                  },
+                },
+              ],
+            },
+            {
+              type: "tableCell",
+              attrs: {
+                localId: "58a4dcfcf55f",
+              },
+              content: [
+                {
+                  type: "paragraph",
+                  attrs: {
+                    localId: "48f778b3b47b",
+                  },
+                },
+              ],
+            },
+            {
+              type: "tableCell",
+              attrs: {
+                localId: "5f987016a2a7",
+              },
+              content: [
+                {
+                  type: "paragraph",
+                  attrs: {
+                    localId: "9ccad3a80185",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
+const COPY_ELIGIBLE_LABELS = ["copy", "copy-clinical"];
+
+/** Initialize the Translation keys field (customfield_11285) with the canonical
+ * Key/Copy/Comment table. The server enforces project and label eligibility
+ * independently of the client, and never overwrites existing content. */
+export async function initializeTranslationKeys(
+  issueKey: string,
+): Promise<InitializeTranslationKeysResponse> {
+  const jira = getClient();
+
+  const readCopyFields = async () => {
+    const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+      jql: `key = "${issueKey}"`,
+      maxResults: 1,
+      fields: ["labels", "project", "customfield_11302", "customfield_11285"],
+    });
+    const issue = result.issues?.[0];
+    if (!issue) throw new IssueNotFoundError(issueKey);
+    return issue.fields as Record<string, unknown>;
+  };
+
+  const fields = await readCopyFields();
+
+  const projectKey = (fields.project as { key?: string } | null)?.key;
+  const labels = (fields.labels as string[] | null) ?? [];
+  if (projectKey !== MISSION_PROJECT || !COPY_ELIGIBLE_LABELS.some((l) => labels.includes(l))) {
+    throw new CopyIneligibleError(issueKey);
+  }
+
+  const currentCopy = buildIssueCopyData(fields);
+  if (currentCopy.translationKeysState === "initialized") {
+    return { outcome: "already-initialized", copy: currentCopy };
+  }
+
+  await jira.issues.editIssue({
+    issueIdOrKey: issueKey,
+    fields: { customfield_11285: TRANSLATION_KEYS_TEMPLATE },
+    notifyUsers: false,
+  });
+
+  const updatedCopy = buildIssueCopyData(await readCopyFields());
+  if (updatedCopy.translationKeysState !== "initialized") {
+    throw new TranslationKeysUpstreamError(issueKey);
+  }
+
+  return { outcome: "initialized", copy: updatedCopy };
 }
