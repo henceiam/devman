@@ -4,7 +4,7 @@
 
 **Blocked by:** 07: Unify Mission milestone presentation behind the shared workspace.
 
-**Status:** completed
+Status: completed
 
 - [x] Only exact Jira values `Milestone 1` through `Milestone 10` are classified as numbered milestones; all other unexpected stored values remain visible as unknown rows without normalization.
 - [x] Rows are ordered as **No milestone**, numbered milestones ascending, unknown values lexicographically by stored value, then **Out of scope**.

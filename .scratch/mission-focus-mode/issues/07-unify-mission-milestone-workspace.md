@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** resolved
+Status: completed
 
 - [x] An exported pure projector supplies typed milestone rows with stable identity, kind, display name, optional milestone number, description, `allStories`, `visibleStories`, complete status counts, synthesized state, description editability, and drop eligibility.
 - [x] Rejected stories are excluded before projection, while the Done-card filter affects `visibleStories` without changing `allStories` or complete status counts.
@@ -16,6 +16,6 @@
 - [x] Production-helper and workspace tests cover the shared projection, filtering, collapse ownership, and Mission-change reset without duplicating production logic.
 - [x] Existing client tests and the production build pass.
 
-## Comments
+## Completion
 
 - Resolved by commit `5dceb02` (`refactor: unify mission milestone workspace`). Verified with `pnpm --filter @devman/client test` (48 tests passed) and `pnpm build` (client and server passed).

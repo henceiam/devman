@@ -4,7 +4,7 @@
 
 **Blocked by:** 09: Introduce the responsive Focus-mode shell.
 
-**Status:** completed
+Status: completed
 
 - [x] Native `type="button"` controls are named `Enter Focus mode` and `Exit Focus mode`, expose `aria-keyshortcuts="Z"`, and show a presentational `Z` key hint that is not duplicated in their accessible names.
 - [x] A non-repeating `Z` keydown, including `Shift+Z`, toggles Focus mode only when the event is not prevented and has no Ctrl, Cmd, or Alt modifier.

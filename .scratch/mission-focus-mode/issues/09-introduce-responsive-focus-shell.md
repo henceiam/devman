@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** completed
+Status: completed
 
 - [x] Mission page exclusively owns transient Focus state; it survives Mission and List/Story Map switches while the page remains mounted and resets after navigation away or remounting.
 - [x] A route-agnostic application-chrome interface lets mounted content request header omission without coupling the shell to Missions or Focus mode.

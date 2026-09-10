@@ -18,6 +18,16 @@ Create a new file under `.scratch/<feature-slug>/` (creating the directory if ne
 
 Read the file at the referenced path. The user will normally pass the path or the issue number directly.
 
+## Implementation ticket operations
+
+Used by `/implement-ticket` for tickets produced by `/to-tickets`.
+
+- **Lifecycle**: `ready-for-agent` -> `claimed` -> `completed`.
+- **Frontier**: scan the feature's `issues/` directory for tickets with status `ready-for-agent` whose `Blocked by` tickets are all `completed`; first by number wins.
+- **Claim**: re-read the ticket, replace `Status: ready-for-agent` with `Status: claimed` before changing code, then verify the saved status. Never take over a claimed ticket.
+- **Complete**: check every satisfied acceptance criterion, set `Status: completed`, and append the implementation commit or pull request under `## Completion`.
+- **Blocked implementation**: leave the ticket `claimed` and append the blocker under `## Comments`. Return it to `ready-for-agent` only when no partial work or state needs preserving.
+
 ## Wayfinding operations
 
 Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
