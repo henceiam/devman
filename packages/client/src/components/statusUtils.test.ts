@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { displayStatus, getStatusStyle } from "./statusUtils";
+import { copyStatusBadge, displayStatus, getStatusStyle } from "./statusUtils";
+import { renderToStaticMarkup } from "react-dom/server";
 
 describe("displayStatus", () => {
   it("returns short name for mapped statuses", () => {
@@ -45,5 +46,20 @@ describe("getStatusStyle", () => {
     expect(dotColor).toBe("#9ca3af");
     const { dotColor: dotColor2 } = getStatusStyle("Request");
     expect(dotColor2).toBe("#9ca3af");
+  });
+});
+
+describe("copyStatusBadge", () => {
+  it("uses sky classes for a known copy status", () => {
+    const html = renderToStaticMarkup(copyStatusBadge("Copy - ready to start"));
+    expect(html).toContain("bg-sky-100 text-sky-700");
+    expect(html).toContain("rounded-full px-2 py-0.5 text-xs font-medium");
+    expect(html).toContain("Copy - ready to start");
+  });
+
+  it("falls back to gray classes for an unknown value", () => {
+    const html = renderToStaticMarkup(copyStatusBadge("Some Unknown Status"));
+    expect(html).toContain("bg-gray-100 text-gray-600");
+    expect(html).toContain("Some Unknown Status");
   });
 });
