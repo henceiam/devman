@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useState } from "react";
-import { api, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse, type WayfinderResponse, type CommentItem } from "../api/client";
+import { api, type IssueCopyData, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse, type WayfinderResponse, type CommentItem } from "../api/client";
 import { statusBadge, ageInfo } from "./statusUtils";
 import PrStateIcon from "./PrStateIcon";
 import LabelIcons from "./LabelIcons";
 import GitHubPrTab from "./GitHubPrTab";
 import WayfinderTab from "./WayfinderTab";
+import CopyTab from "./CopyTab";
 import JiraLink from "./JiraLink";
 
 interface StoryDetailModalProps {
@@ -223,7 +224,7 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose, closeOnE
   const [detail, setDetail] = useState<StoryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"subtasks" | "details" | "plan" | "github" | "wayfinder" | "comments">("subtasks");
+  const [activeTab, setActiveTab] = useState<"subtasks" | "details" | "plan" | "github" | "wayfinder" | "copy" | "comments">("subtasks");
   const [githubData, setGithubData] = useState<StoryGitHubResponse | null>(null);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
@@ -284,6 +285,10 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose, closeOnE
         .catch((e) => setWayfinderError(e.message))
         .finally(() => setWayfinderLoading(false));
     }
+  };
+
+  const handleCopyChange = (copy: IssueCopyData) => {
+    setDetail((current) => (current ? { ...current, copy } : current));
   };
 
   useEffect(() => {
@@ -380,6 +385,18 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose, closeOnE
                 Wayfinder
               </button>
             )}
+            {detail.key.startsWith("EBBACKLOG-") && (detail.labels.includes("copy") || detail.labels.includes("copy-clinical")) && (
+              <button
+                onClick={() => setActiveTab("copy")}
+                className={`border-b-2 px-3 py-2 text-xs font-medium transition ${
+                  activeTab === "copy"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Copy
+              </button>
+            )}
             <button
               onClick={() => setActiveTab("comments")}
               className={`border-b-2 px-3 py-2 text-xs font-medium transition ${
@@ -422,6 +439,10 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose, closeOnE
           )}
 
           {detail && activeTab === "plan" && renderContent(detail.implementationPlan)}
+
+          {detail && activeTab === "copy" && (
+            <CopyTab key={detail.key} copy={detail.copy} issueKey={detail.key} onCopyChange={handleCopyChange} />
+          )}
 
           {detail && activeTab === "comments" && (
             commentsLoading ? (

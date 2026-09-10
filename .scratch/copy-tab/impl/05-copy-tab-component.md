@@ -1,7 +1,7 @@
 # Impl T5 — CopyTab component + modal wiring
 
 Type: implementation
-Status: ready-for-agent
+Status: completed
 Blocked by: 01, 02, 03, 04
 
 ## Scope
@@ -53,4 +53,11 @@ Authoritative context:
 
 ## Completion
 
-Report the commit hash and the test file path(s).
+- Commit: `415f2e4` (`feat: add Copy tab to story detail modal with translation-key initialization`), branch `agent/copy-tab-t5`.
+- Test file: `packages/client/src/components/StoryDetailModal.test.tsx` (extended; 13 Copy-tab tests added alongside T3's 4 ADF table tests — 17 total in the file, 136 across the client suite, all passing). `pnpm build` typechecks both packages.
+- Coverage: tab absence (no label / non-exact label `copywriting` / non-EBBACKLOG key) and presence; badge value + gray fallback classes; `Not set` when status null; `copy-clinical` eligibility; initialized table render; empty-state action; pending state (`Creating table…`, disabled, no optimistic table); success replacing the panel with the authoritative table + refreshed status badge; thrown `ApiError(409)` → amber notice + refreshed content; non-conflict failure → red inline error + action stays enabled; Copy tab never auto-selected; notice positioned above refreshed content with no tab switch/modal close.
+- Deviations:
+  1. **Notice clearing implemented as React's render-time "adjusting state when a prop changes" pattern** (`conflictCopy !== copy` → reset) instead of `useEffect(() => setConflict(false), [copy])`. The effect version was verified via logging to fire *before* the queued `setConflict(true)` from the catch block was committed (both queued against the same pre-update render), wiping the notice every time — an ordering hazard. The documented render-time adjustment pattern is race-free.
+  2. **`key={detail.key}` on `<CopyTab>`** so per-story conflict/saving state resets on story change (modal instance survives `storyKey` prop changes; a key is the idiomatic reset and keeps the modal's storyKey-change effect untouched).
+  3. Test for the notice lifecycle asserts position-above-content + no tab switch/modal close rather than cross-tab persistence (remount-on-tab-switch follows the GitHub/Wayfinder tab pattern).
+- No atomicity claims in UI copy; no toast; no tab switch; no modal close on either outcome.
