@@ -1,7 +1,7 @@
 # Impl T2 — Client API layer: ApiError + initializeTranslationKeys
 
 Type: implementation
-Status: ready-for-agent
+Status: completed
 Blocked by:
 
 ## Scope
@@ -31,4 +31,7 @@ This ticket duplicates the types the server ticket (T1) defines; it does NOT dep
 
 ## Completion
 
-Report the commit hash.
+Commit: aceb9a9
+
+- `pnpm --filter @devman/client test` — 117/117 passing (12 files).
+- `pnpm build` — typechecks cleanly (client + server).
