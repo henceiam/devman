@@ -1,7 +1,7 @@
 # Impl T1 — Server: Copy read contract + initialize endpoint
 
 Type: implementation
-Status: ready-for-agent
+Status: completed
 Blocked by:
 
 ## Scope
@@ -40,4 +40,58 @@ Authoritative context (read these; do not redesign):
 
 ## Completion
 
-Report the commit hash and the exact type signatures added.
+Commit: `e236f7d4f33ef2f7632e07e1cbb5d23416b3eab8` (branch `agent/copy-tab-t1`, not pushed).
+
+Files changed:
+- `packages/server/src/services/missions.ts` (+330): new types near `StoryDetailResponse`; `copy: IssueCopyData` added to `StoryDetailResponse`; `"customfield_11302"`/`"customfield_11285"` added to the `getStoryDetail` fields array; `copy:` populated in the return literal via new private helpers; new `initializeTranslationKeys` service function; new exported error classes; canonical template constant.
+- `packages/server/src/routes/missions.ts` (+20): `POST /issues/:issueKey/copy/translation-keys/initialize` registered at end of file, mapping outcomes to 200/409/404/422/502/500.
+
+Exact type signatures added (in `packages/server/src/services/missions.ts`):
+
+```ts
+export interface AdfNode {
+  type: string;
+  attrs?: Record<string, unknown>;
+  content?: AdfNode[];
+  text?: string;
+  marks?: Array<{ type: string; attrs?: Record<string, unknown> }>;
+  [key: string]: unknown;
+}
+
+export interface AdfDocument extends AdfNode {
+  type: "doc";
+  version: 1;
+  content: AdfNode[];
+}
+
+export interface IssueCopyData {
+  status: string | null;
+  translationKeys: AdfDocument | null;
+  translationKeysState: "empty" | "initialized";
+}
+
+export type InitializeTranslationKeysResponse =
+  | { outcome: "initialized"; copy: IssueCopyData }
+  | { outcome: "already-initialized"; copy: IssueCopyData };
+
+export class IssueNotFoundError extends Error { readonly code = "NOT_FOUND" as const; ... }
+export class CopyIneligibleError extends Error { readonly code = "INELIGIBLE" as const; ... }
+export class TranslationKeysUpstreamError extends Error { readonly code = "UPSTREAM" as const; ... }
+
+export async function initializeTranslationKeys(
+  issueKey: string,
+): Promise<InitializeTranslationKeysResponse>
+```
+
+`StoryDetailResponse` gained `copy: IssueCopyData;` as its last field.
+
+Notes / deviations:
+- Typed outcomes use small exported Error subclasses with a `code` property (route distinguishes via `instanceof`, not string matching), per the ticket's suggested approach. The 404 mapping applies only to the new route; existing story-detail not-found behavior (500) is unchanged.
+- `translationKeys` returns `null` whenever the state is `"empty"` (missing/null/structurally contentless/malformed all collapse to `null`), per the spec text; the validity check plus a "meaningful content" walk (any non-empty `text`, or any `table` node — a table counts even with all-blank cells) implements the "structurally contentless" rule. Malformed ADF (fails the doc/version/content invariants) also yields `null`.
+- The canonical ADF template was verified byte-for-byte (post JSON-serialization) against `research/reference-table-and-field-schema.md` lines 27–226, including every `localId`.
+- `maxResults: 1` added to the initialize read (same as the existing single-key reads at getStoryDetail).
+
+Verification:
+- `pnpm --filter @devman/server test` — 12/12 pass.
+- `pnpm build` (worktree root) — server `tsc` and client `tsc -b && vite build` both clean.
+- Manual endpoint verification against live Jira was not performed in this worktree (no running server/Jira credentials exercise here); per the ticket this is the ocular-testing step left to the integrator.
