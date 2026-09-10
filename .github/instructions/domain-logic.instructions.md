@@ -17,7 +17,7 @@ This is the most critical domain knowledge — **undocumented tribal knowledge**
 | `customfield_11101` | Acceptance Criteria | String/ADF | All issues | AC text or rich text |
 | `customfield_11104` | Target Date | Date string | Story | Used for copy/translation countdown |
 | `customfield_11302` | Copy Status | `{ value: string }` | EBBACKLOG issues | Translation workflow status (see Copy Status values below) |
-| `customfield_11285` | Translation keys | ADF document | EBBACKLOG issues | Read-only in DevMan when populated; Copy-eligible issues can initialize an empty value from the canonical table template |
+| `customfield_11285` | Translation keys | ADF document | EBBACKLOG issues | Read-only in DevMan when populated; Copy-eligible issues can initialize an empty value from the canonical table template (best-effort, see note below) |
 | `customfield_11357` | Size/Estimate | `{ value: "XS"\|"S"\|"M"\|"L"\|"XL" }` | All issues | T-shirt size estimate |
 | `customfield_11465` | Hidden Date | Date string | Epic, Story | If set and in the future, hides the item from dashboards |
 | `customfield_11477` | Milestone | `{ value: string }` | Story | Which milestone row the story belongs to (e.g., "Milestone 1", "Out of scope") |
@@ -149,6 +149,7 @@ If GitHub API fails (e.g. private repo), build a `PrDetail` from Jira dev-status
 - **PR cross-referencing**: DevMan cross-references Jira's `customfield_10000` with GitHub Octokit API to get reviewer details, approval state, stats, and labels. Use `listRequestedReviewers` (not `listReviewRequests` — that method does not exist).
 - **Copy Status**: Display only — show as a status badge on issues, no active pipeline tracking needed.
 - **Copy eligibility**: Any EBBACKLOG issue type, including Subtasks, is eligible when it carries the exact, case-sensitive label `copy` or `copy-clinical`. Issue type is not part of the eligibility rule.
+- **Translation keys initialization**: `initializeTranslationKeys` in `services/missions.ts` is best-effort, NOT atomic — Jira's Edit issue API has no compare-and-set for `customfield_11285`, so a residual time-of-check/time-of-use race remains: content written between the empty-check read and the write can be overwritten. Guarded by project (`EBBACKLOG`) + Copy-eligibility label check and an "already initialized" short-circuit, never claimed atomic.
 - **Hidden Date**: Behavior when date passes is TBD — defer implementation details for later.
 - **"In progress" definition** for Launchpad: statuses `In Progress`, `Code review`, `Ready for test`.
 

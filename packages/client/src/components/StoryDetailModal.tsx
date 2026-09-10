@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
-import { api, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse, type WayfinderResponse, type CommentItem } from "../api/client";
+import { Fragment, useEffect, useState } from "react";
+import { api, type IssueCopyData, type StoryDetailResponse, type SubtaskItem, type StoryGitHubResponse, type WayfinderResponse, type CommentItem } from "../api/client";
 import { statusBadge, ageInfo } from "./statusUtils";
 import PrStateIcon from "./PrStateIcon";
 import LabelIcons from "./LabelIcons";
 import GitHubPrTab from "./GitHubPrTab";
 import WayfinderTab from "./WayfinderTab";
+import CopyTab from "./CopyTab";
 import JiraLink from "./JiraLink";
 
 interface StoryDetailModalProps {
@@ -15,7 +16,7 @@ interface StoryDetailModalProps {
 }
 
 /** Render ADF (Atlassian Document Format) or plain text */
-function renderContent(content: unknown): React.ReactNode {
+export function renderContent(content: unknown): React.ReactNode {
   if (!content) return <p className="text-sm text-gray-400 italic">No content</p>;
   if (typeof content === "string") {
     return <div className="prose prose-sm max-w-none whitespace-pre-wrap text-gray-700">{content}</div>;
@@ -28,7 +29,7 @@ function renderContent(content: unknown): React.ReactNode {
   return <p className="text-sm text-gray-400 italic">Unable to render content</p>;
 }
 
-interface AdfNode {
+export interface AdfNode {
   type: string;
   text?: string;
   content?: AdfNode[];
@@ -36,7 +37,7 @@ interface AdfNode {
   marks?: Array<{ type: string; attrs?: Record<string, unknown> }>;
 }
 
-function renderAdfNode(node: AdfNode): React.ReactNode {
+export function renderAdfNode(node: AdfNode): React.ReactNode {
   if (node.type === "text") {
     let element: React.ReactNode = node.text ?? "";
     for (const mark of node.marks ?? []) {
@@ -105,9 +106,48 @@ function renderAdfNode(node: AdfNode): React.ReactNode {
     case "mediaSingle":
     case "media":
       return null;
+    case "table": {
+      // Do NOT use the shared `renderedChildren` helper here: it wraps each child in
+      // `<span key>`, which is invalid inside `<table>`/`<tr>`. Map rows directly.
+      const rows = node.content ?? [];
+      const isHeaderRow = (row: AdfNode) =>
+        (row.content ?? []).length > 0 && (row.content ?? []).every((cell) => cell.type === "tableHeader");
+      const headerRows = rows.filter((row) => row.type === "tableRow" && isHeaderRow(row));
+      const bodyRows = rows.filter((row) => row.type === "tableRow" && !isHeaderRow(row));
+      return (
+        <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <table className="w-full table-fixed border-collapse text-left text-sm">
+            {headerRows.length > 0 && (
+              <thead className="bg-gray-50 text-xs font-semibold text-gray-600">
+                {headerRows.map((row, i) => (
+                  <tr key={i}>{(row.content ?? []).map((cell, j) => renderAdfNodeKeyed(cell, j))}</tr>
+                ))}
+              </thead>
+            )}
+            <tbody className="text-gray-700">
+              {bodyRows.map((row, i) => (
+                <tr key={i}>{(row.content ?? []).map((cell, j) => renderAdfNodeKeyed(cell, j))}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    case "tableRow":
+      // Rows are rendered by the `table` case; this is only a fallback for orphan rows.
+      return <tr>{(node.content ?? []).map((cell, i) => renderAdfNodeKeyed(cell, i))}</tr>;
+    case "tableHeader":
+      return <th className="border-b border-r border-gray-200 px-3 py-2 align-top last:border-r-0">{renderedChildren}</th>;
+    case "tableCell":
+      return <td className="border-b border-r border-gray-200 px-3 py-2 align-top last:border-r-0">{renderedChildren}</td>;
     default:
       return <>{renderedChildren}</>;
   }
+}
+
+/** Render an ADF child with a React key, without the `<span>` wrapper (for table cells). */
+function renderAdfNodeKeyed(node: AdfNode, key: number): React.ReactNode {
+  return <Fragment key={key}>{renderAdfNode(node)}</Fragment>;
 }
 
 function SubtaskKanban({ subtasks, hideDone, isEpic }: { subtasks: SubtaskItem[]; hideDone: boolean; isEpic?: boolean }) {
@@ -184,7 +224,7 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose, closeOnE
   const [detail, setDetail] = useState<StoryDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"subtasks" | "details" | "plan" | "github" | "wayfinder" | "comments">("subtasks");
+  const [activeTab, setActiveTab] = useState<"subtasks" | "details" | "plan" | "github" | "wayfinder" | "copy" | "comments">("subtasks");
   const [githubData, setGithubData] = useState<StoryGitHubResponse | null>(null);
   const [githubLoading, setGithubLoading] = useState(false);
   const [githubError, setGithubError] = useState<string | null>(null);
@@ -245,6 +285,10 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose, closeOnE
         .catch((e) => setWayfinderError(e.message))
         .finally(() => setWayfinderLoading(false));
     }
+  };
+
+  const handleCopyChange = (copy: IssueCopyData) => {
+    setDetail((current) => (current ? { ...current, copy } : current));
   };
 
   useEffect(() => {
@@ -341,6 +385,18 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose, closeOnE
                 Wayfinder
               </button>
             )}
+            {detail.key.startsWith("EBBACKLOG-") && (detail.labels.includes("copy") || detail.labels.includes("copy-clinical")) && (
+              <button
+                onClick={() => setActiveTab("copy")}
+                className={`border-b-2 px-3 py-2 text-xs font-medium transition ${
+                  activeTab === "copy"
+                    ? "border-blue-500 text-blue-600"
+                    : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Copy
+              </button>
+            )}
             <button
               onClick={() => setActiveTab("comments")}
               className={`border-b-2 px-3 py-2 text-xs font-medium transition ${
@@ -383,6 +439,10 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose, closeOnE
           )}
 
           {detail && activeTab === "plan" && renderContent(detail.implementationPlan)}
+
+          {detail && activeTab === "copy" && (
+            <CopyTab key={detail.key} copy={detail.copy} issueKey={detail.key} onCopyChange={handleCopyChange} />
+          )}
 
           {detail && activeTab === "comments" && (
             commentsLoading ? (

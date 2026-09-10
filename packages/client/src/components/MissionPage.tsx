@@ -20,14 +20,6 @@ type MissionModal =
 
 type FocusTransition = "enter" | "deliberate-exit" | "responsive-exit";
 
-const COPY_STATUS_COLORS: Record<string, string> = {
-  "Copy - ready to start": "bg-sky-100 text-sky-700",
-  "Copy - in progress": "bg-sky-100 text-sky-700",
-  "Translation - ready to start": "bg-yellow-100 text-yellow-700",
-  "Translation - in progress": "bg-yellow-100 text-yellow-700",
-  "Translation - done": "bg-green-100 text-green-700",
-};
-
 function categoryLabel(key: string) {
   if (key === "done") return "Done";
   if (key === "indeterminate") return "In Progress";
