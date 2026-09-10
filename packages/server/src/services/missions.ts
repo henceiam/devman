@@ -544,17 +544,21 @@ function isValidAdfDocument(raw: unknown): raw is AdfDocument {
   return doc.type === "doc" && doc.version === 1 && Array.isArray(doc.content);
 }
 
-/** "Structurally contentless" = empty content array, or only nodes with no text and no meaningful structure.
- * A `table` node is always meaningful content, even when all its cells are blank. */
-function hasMeaningfulAdfContent(content: AdfNode[]): boolean {
+/** "Structurally contentless" = empty content array, or only `paragraph`/`doc` containers
+ * with no meaningful descendants. EVERY other node type is meaningful — including tables
+ * (even with all-blank cells) and non-text leaf nodes like `inlineCard`, `mention`, or
+ * `mediaSingle` — so a doc containing only such nodes counts as initialized and is never
+ * overwritten by initialize. (Allowlist of contentless types, not a denylist.) */
+export function hasMeaningfulAdfContent(content: AdfNode[]): boolean {
   return content.some(nodeHasMeaningfulContent);
 }
 
 function nodeHasMeaningfulContent(node: AdfNode): boolean {
-  if (typeof node.text === "string" && node.text.length > 0) return true;
-  if (node.type === "table") return true;
-  if (Array.isArray(node.content)) return hasMeaningfulAdfContent(node.content);
-  return false;
+  if (typeof node.text === "string") return node.text.length > 0;
+  if (node.type === "paragraph" || node.type === "doc") {
+    return Array.isArray(node.content) && hasMeaningfulAdfContent(node.content);
+  }
+  return true;
 }
 
 // "Blocks" link type is admin-editable per Jira instance; this id was confirmed live

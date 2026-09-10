@@ -6,7 +6,7 @@ import { renderContent } from "./StoryDetailModal";
 interface CopyTabProps {
   copy: IssueCopyData;
   issueKey: string;
-  onCopyChange: (copy: IssueCopyData, meta?: { conflict?: boolean }) => void;
+  onCopyChange: (copy: IssueCopyData) => void;
 }
 
 export default function CopyTab({ copy, issueKey, onCopyChange }: CopyTabProps) {
@@ -24,7 +24,7 @@ export default function CopyTab({ copy, issueKey, onCopyChange }: CopyTabProps) 
     setError(false);
     try {
       const response = await api.missions.initializeTranslationKeys(issueKey);
-      onCopyChange(response.copy, { conflict: response.outcome === "already-initialized" });
+      onCopyChange(response.copy);
       if (response.outcome === "already-initialized") {
         setConflictCopy(response.copy);
         setConflict(true);
@@ -33,7 +33,7 @@ export default function CopyTab({ copy, issueKey, onCopyChange }: CopyTabProps) 
       if (err instanceof ApiError && err.status === 409) {
         const body = err.body as InitializeTranslationKeysResponse | undefined;
         if (body?.copy) {
-          onCopyChange(body.copy, { conflict: true });
+          onCopyChange(body.copy);
           setConflictCopy(body.copy);
           setConflict(true);
         } else {
