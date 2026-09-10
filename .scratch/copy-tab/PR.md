@@ -27,8 +27,8 @@ Closes:
 | T2 | `impl/02-client-api.md` — ApiError + client types + endpoint wrapper | — | merged |
 | T3 | `impl/03-adf-table-rendering.md` — table cases in renderAdfNode + tests | — | merged |
 | T4 | `impl/04-copy-status-badge.md` — copyStatusBadge + tests | — | merged |
-| T5 | `impl/05-copy-tab-component.md` — CopyTab + modal wiring + tests | T1, T2, T3, T4 | blocked |
-| T6 | `impl/06-docs.md` — TOCTOU + domain docs | T1 | blocked |
+| T5 | `impl/05-copy-tab-component.md` — CopyTab + modal wiring + tests | T1, T2, T3, T4 | merged |
+| T6 | `impl/06-docs.md` — TOCTOU + domain docs | T1 | merged |
 
 ## Verification
 
