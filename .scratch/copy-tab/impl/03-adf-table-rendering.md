@@ -1,7 +1,7 @@
 # Impl T3 — ADF table rendering in renderAdfNode
 
 Type: implementation
-Status: ready-for-agent
+Status: completed
 Blocked by:
 
 ## Scope
@@ -34,4 +34,9 @@ Do NOT add the Copy tab button, `"copy"` to the activeTab union, or `CopyTab.tsx
 
 ## Completion
 
-Report the commit hash and the test file path.
+- Commit: `befd01a` (`feat: render ADF tables in story detail content`), branch `agent/copy-tab-t3`.
+- Test file: `packages/client/src/components/StoryDetailModal.test.tsx` (4 tests: real `<table>` + Key/Copy/Comment header cells, blank cells stay blank, `strong` mark applies inside cells, no column-position `font-mono` styling).
+- Verified: `pnpm --filter @devman/client exec vitest run src/components/StoryDetailModal.test.tsx` passes; full `pnpm --filter @devman/client test` passes (13 files / 121 tests); `pnpm build` typechecks both packages.
+- Exported `renderContent`, `renderAdfNode`, and `AdfNode` from `StoryDetailModal.tsx` for T5's CopyTab reuse. No Copy tab button, no `activeTab` change, no `CopyTab.tsx`.
+- Fixtures match the current (pre-T2) client `StoryDetailResponse` — no `copy` field.
+- Deviation: the shared empty-cell styling covers blank cells (empty paragraph children render as empty text); the prototype's `<span className="text-gray-300">&nbsp;</span>` visual hint for blank cells was not adopted since the spec's hard requirement is only "blank stays blank, never `Not set`", which is tested.
