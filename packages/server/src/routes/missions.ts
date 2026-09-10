@@ -138,3 +138,23 @@ missionsRouter.patch("/stories/:storyKey", async (req: Request<{ storyKey: strin
     res.status(500).json({ error: message });
   }
 });
+
+missionsRouter.post("/issues/:issueKey/copy/translation-keys/initialize", async (req: Request<{ issueKey: string }>, res: Response) => {
+  try {
+    const { issueKey } = req.params;
+    const result = await missionService.initializeTranslationKeys(issueKey);
+    res.status(result.outcome === "initialized" ? 200 : 409).json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error(`Missions POST /issues/${req.params.issueKey}/copy/translation-keys/initialize error:`, message);
+    if (error instanceof missionService.IssueNotFoundError) {
+      res.status(404).json({ error: message });
+    } else if (error instanceof missionService.CopyIneligibleError) {
+      res.status(422).json({ error: message });
+    } else if (error instanceof missionService.TranslationKeysUpstreamError) {
+      res.status(502).json({ error: message });
+    } else {
+      res.status(500).json({ error: message });
+    }
+  }
+});
