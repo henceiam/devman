@@ -1,7 +1,7 @@
 # Impl T4 — copyStatusBadge helper + tests
 
 Type: implementation
-Status: ready-for-agent
+Status: completed
 Blocked by:
 
 ## Scope
@@ -24,4 +24,8 @@ Authoritative context:
 
 ## Completion
 
-Report the commit hash.
+Commit: `4081cfc` — `feat: add copyStatusBadge helper with gray fallback`
+
+- `statusUtils.tsx`: added exported `copyStatusBadge(status)` next to `statusBadge`, mirroring its pill classes (`rounded-full px-2 py-0.5 text-xs font-medium`), keyed to `COPY_STATUS_COLORS` with fallback `bg-gray-100 text-gray-600`.
+- `statusUtils.test.ts`: new `copyStatusBadge` describe block — known value (`"Copy - ready to start"` → sky classes) and unknown value (→ gray fallback), asserting via `renderToStaticMarkup`.
+- Verified: `vitest run src/components/statusUtils.test.ts` — 10/10 pass; `pnpm build` typechecks (client + server).
