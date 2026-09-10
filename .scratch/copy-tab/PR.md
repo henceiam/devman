@@ -2,7 +2,7 @@
 
 **Branch:** `feat/copy-tab` (worktree: `/Users/henricjohansson/DevMan.worktrees/copy-tab`)
 **Base:** `main` (d7037f7)
-**State:** DRAFT
+**State:** READY FOR REVIEW
 
 > This repo has no git remote; this file is the pull-request record. The branch is the reviewable artifact.
 
@@ -32,7 +32,17 @@ Closes:
 
 ## Verification
 
-- Client: `pnpm --filter @devman/client test`
-- Server: `pnpm --filter @devman/server test`
-- Build: `pnpm build`
+- Client: `pnpm --filter @devman/client test` — 136/136
+- Server: `pnpm --filter @devman/server test` — 19/19
+- Build: `pnpm build` — clean
 - Server endpoint verified manually per spec (no jira.js mock harness).
+
+## Code review
+
+Two-axis review (standards + spec) run against `main...HEAD`; findings fixed in `agent/copy-tab-review-fixes` (merged as bc5fa72):
+
+- **fix:** non-text leaf ADF nodes (`inlineCard`, `mention`, …) no longer classified as empty — removes an overwrite risk (97b5344, +7 server tests).
+- **fix:** dropped unused `meta` param from `CopyTab.onCopyChange` (f3d65de).
+- **fix:** removed dead `COPY_STATUS_COLORS` duplicate in MissionPage.tsx (f18f46e).
+
+Accepted as-is (documented decisions): client eligibility via key-prefix + labels (server independently enforces); render-phase conflict-notice clearing; ADF renderer exported from StoryDetailModal.
