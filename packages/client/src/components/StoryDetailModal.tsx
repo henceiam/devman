@@ -137,9 +137,9 @@ export function renderAdfNode(node: AdfNode): React.ReactNode {
       // Rows are rendered by the `table` case; this is only a fallback for orphan rows.
       return <tr>{(node.content ?? []).map((cell, i) => renderAdfNodeKeyed(cell, i))}</tr>;
     case "tableHeader":
-      return <th className="border-b border-r border-gray-200 px-3 py-2 align-top last:border-r-0">{renderedChildren}</th>;
+      return <th className="border-b border-r border-gray-200 px-3 py-2 align-top break-words last:border-r-0">{renderedChildren}</th>;
     case "tableCell":
-      return <td className="border-b border-r border-gray-200 px-3 py-2 align-top last:border-r-0">{renderedChildren}</td>;
+      return <td className="border-b border-r border-gray-200 px-3 py-2 align-top break-words last:border-r-0">{renderedChildren}</td>;
     default:
       return <>{renderedChildren}</>;
   }

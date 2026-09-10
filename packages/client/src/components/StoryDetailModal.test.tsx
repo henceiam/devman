@@ -136,6 +136,15 @@ describe("StoryDetailModal ADF table rendering", () => {
     expect(strong).toHaveTextContent("Choose delivery method");
   });
 
+  it("wraps long unbroken keys inside cells instead of overflowing", async () => {
+    renderModalWithDetail(makeDetail({ description: tableDescription }));
+    await openDetailsTab("A story with a table");
+
+    for (const cell of document.querySelectorAll("th, td")) {
+      expect(cell).toHaveClass("break-words");
+    }
+  });
+
   it("does not let a column position drive styling (no font-mono on the first column)", async () => {
     renderModalWithDetail(makeDetail({ description: tableDescription }));
     await openDetailsTab("A story with a table");
