@@ -16,6 +16,7 @@ function makeDetail(overrides: Partial<StoryDetailResponse> = {}): StoryDetailRe
     subtasks: [],
     prState: null,
     labels: [],
+    copy: { status: null, translationKeys: null, translationKeysState: "empty" },
     ...overrides,
   };
 }
