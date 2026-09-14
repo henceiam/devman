@@ -83,7 +83,7 @@ This is undocumented tribal knowledge that isn't discoverable from Jira's UI. Th
 
 ### Issue tracker
 
-Issues live as local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+Issues live as GitHub issues in this repo, using the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
