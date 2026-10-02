@@ -55,11 +55,18 @@ describe("CopyProgressPage", () => {
             { header: "Copy - clinical", value: "Continue to checkout" },
           ],
           comment: "Shown on the payment step",
+          matchState: "matched",
+          locales: [
+            { locale: "en-GB", state: "found", value: "Continue in English" },
+            { locale: "fr-FR", state: "missing" },
+          ],
         },
         {
           key: "checkout.confirm",
           referenceCopies: [{ header: "Copy", value: "Confirm" }],
           comment: "Submit payment",
+          matchState: "matched",
+          locales: [{ locale: "en-GB", state: "found", value: "Confirm in English" }],
         },
       ],
     };
@@ -81,10 +88,56 @@ describe("CopyProgressPage", () => {
     expect(screen.getByText("Shown on the payment step")).toBeInTheDocument();
     expect(screen.getByText("Copy")).toBeInTheDocument();
     expect(screen.getByText("Copy - clinical")).toBeInTheDocument();
+    expect(screen.getByText("Base translation values")).toBeInTheDocument();
+    expect(screen.getByText("Continue in English")).toBeInTheDocument();
+    expect(screen.getByText("fr-FR")).toBeInTheDocument();
+    expect(screen.getByText("Missing value")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "checkout.confirm" }));
     expect(await screen.findByText("Confirm")).toBeInTheDocument();
     expect(screen.getByText("Submit payment")).toBeInTheDocument();
+    expect(screen.getByText("Confirm in English")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders empty strings, missing values, and unmatched keys as distinct states", async () => {
+    vi.spyOn(api.jira, "getCopyProgress").mockResolvedValue({ issues: [issue] });
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        state: "ready",
+        rows: [
+          {
+            key: "checkout.title",
+            referenceCopies: [{ header: "Copy", value: "Continue" }],
+            comment: "",
+            matchState: "matched",
+            locales: [
+              { locale: "en-GB", state: "found", value: "" },
+              { locale: "fr-FR", state: "missing" },
+            ],
+          },
+          {
+            key: "checkout.unregistered",
+            referenceCopies: [{ header: "Copy", value: "Not registered" }],
+            comment: "",
+            matchState: "unmatched",
+            locales: [
+              { locale: "en-GB", state: "missing" },
+              { locale: "fr-FR", state: "missing" },
+            ],
+          },
+        ],
+      }),
+    })));
+    render(<CopyProgressPage />);
+
+    await screen.findByText("Review localized copy");
+    fireEvent.click(screen.getByRole("button", { name: "Show translation keys for EBBACKLOG-123" }));
+    expect(await screen.findByText("(empty string)")).toBeInTheDocument();
+    expect(screen.getByText("Missing value")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "checkout.unregistered" }));
+    expect(screen.getByRole("status")).toHaveTextContent("No exact key match in the translations repository.");
   });
 
   it("shows a successful empty state without treating it as a load error", async () => {
@@ -118,6 +171,8 @@ describe("CopyProgressPage", () => {
             key: "checkout.title",
             referenceCopies: [{ header: "Copy", value: "Continue" }],
             comment: "",
+            matchState: "matched",
+            locales: [{ locale: "en-GB", state: "found", value: "Continue in English" }],
           }],
         }),
       });
@@ -130,7 +185,7 @@ describe("CopyProgressPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
-    expect(await screen.findByText("Continue")).toBeInTheDocument();
+    expect(await screen.findByText("Continue in English")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(screen.getByText("In Progress")).toBeInTheDocument();
   });

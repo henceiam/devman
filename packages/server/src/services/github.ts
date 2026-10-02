@@ -1,6 +1,7 @@
 import { Octokit } from "@octokit/rest";
 import { config } from "../config.js";
 import { getIssueGroupingByKeys } from "./jira.js";
+import type { BaseTranslationSnapshot } from "./translations.js";
 
 let client: Octokit | null = null;
 
@@ -45,6 +46,74 @@ export async function getPrWithReviews(owner: string, repo: string, prNumber: nu
     reviews: reviewsRes.data,
     requestedReviewers: requestsRes.data.users ?? [],
   };
+}
+
+export async function getBaseTranslationSnapshot(): Promise<BaseTranslationSnapshot> {
+  const octokit = getClient();
+  const [baseContents, metadataContent] = await Promise.all([
+    octokit.repos.getContent({ owner: "DoctrinAB", repo: "translations", path: "base" }),
+    octokit.repos.getContent({ owner: "DoctrinAB", repo: "translations", path: "base/i18n.json" }),
+  ]);
+
+  if (!Array.isArray(baseContents.data)) {
+    throw new Error("GitHub returned an invalid translations base directory");
+  }
+
+  const localeNames = baseContents.data
+    .filter((entry) => entry.type === "dir")
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right));
+  if (localeNames.length === 0) {
+    throw new Error("The translations repository has no base locales");
+  }
+
+  const metadata = parseGitHubJsonContent(metadataContent.data, "base/i18n.json");
+  if (!isJsonRecord(metadata)) {
+    throw new Error("The translations repository has invalid base key metadata");
+  }
+
+  const localeResults = await Promise.all(localeNames.map(async (locale) => {
+    const path = `base/${locale}/root.json`;
+    const response = await octokit.repos.getContent({
+      owner: "DoctrinAB",
+      repo: "translations",
+      path,
+    });
+    const values = parseGitHubJsonContent(response.data, path);
+    if (!isTranslationRecord(values)) {
+      throw new Error(`The translations repository has invalid base values in ${path}`);
+    }
+    return [locale, values] as const;
+  }));
+
+  return {
+    metadataKeys: Object.keys(metadata),
+    locales: Object.fromEntries(localeResults),
+  };
+}
+
+function parseGitHubJsonContent(content: unknown, path: string): unknown {
+  if (!content || typeof content !== "object" || Array.isArray(content)) {
+    throw new Error(`GitHub returned an invalid file for ${path}`);
+  }
+  const file = content as { type?: unknown; encoding?: unknown; content?: unknown };
+  if (file.type !== "file" || file.encoding !== "base64" || typeof file.content !== "string") {
+    throw new Error(`GitHub returned unreadable file content for ${path}`);
+  }
+  try {
+    return JSON.parse(Buffer.from(file.content, "base64").toString("utf8")) as unknown;
+  } catch (error) {
+    throw new Error(`GitHub returned invalid JSON for ${path}`, { cause: error });
+  }
+}
+
+function isJsonRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isTranslationRecord(value: unknown): value is Record<string, string | null> {
+  return isJsonRecord(value) &&
+    Object.values(value).every((entry) => typeof entry === "string" || entry === null);
 }
 
 export async function getPullRequests(owner: string, repo: string, state: "open" | "closed" | "all" = "open") {

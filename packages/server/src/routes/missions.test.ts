@@ -36,15 +36,15 @@ describe("GET /api/missions/issues/:issueKey/copy/translation-keys", () => {
     });
   });
 
-  it("returns an error response when Jira fails instead of converting it to empty", async () => {
-    vi.spyOn(missionService, "getIssueTranslationKeys").mockRejectedValue(new Error("Jira unavailable"));
+  it("returns an error response when the translations repository cannot be read", async () => {
+    vi.spyOn(missionService, "getIssueTranslationKeys").mockRejectedValue(new Error("GitHub unavailable"));
     vi.spyOn(console, "error").mockImplementation(() => {});
 
     await withServer(async (baseUrl) => {
       const response = await fetch(`${baseUrl}/api/missions/issues/EBBACKLOG-123/copy/translation-keys`);
 
       expect(response.status).toBe(500);
-      expect(await response.json()).toEqual({ error: "Jira unavailable" });
+      expect(await response.json()).toEqual({ error: "GitHub unavailable" });
     });
   });
 

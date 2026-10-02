@@ -272,6 +272,31 @@ function TranslationKeysExpansion({
               ))}
             </div>
           </div>
+          <div>
+            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Base translation values</h4>
+            {selectedRow.matchState === "unmatched" && (
+              <p role="status" className="mb-2 text-sm text-amber-800">
+                No exact key match in the translations repository.
+              </p>
+            )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {selectedRow.locales.map((translation) => (
+                <article
+                  key={translation.locale}
+                  className="rounded-md border border-gray-200 bg-white p-3"
+                >
+                  <h5 className="text-xs font-semibold text-gray-700">{translation.locale}</h5>
+                  {translation.state === "found" ? (
+                    <p className="mt-1 whitespace-pre-wrap text-sm text-gray-800">
+                      {translation.value === "" ? "(empty string)" : translation.value}
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-sm text-gray-500">Missing value</p>
+                  )}
+                </article>
+              ))}
+            </div>
+          </div>
         </section>
       )}
     </div>

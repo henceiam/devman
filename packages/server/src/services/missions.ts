@@ -1,6 +1,7 @@
 import { Version3Client } from "jira.js";
 import { config } from "../config.js";
 import { getPrWithReviews } from "./github.js";
+import { getTranslationKeyValues } from "./translations.js";
 
 let client: Version3Client | null = null;
 
@@ -109,7 +110,23 @@ export interface TranslationKeyRow {
   key: string;
   referenceCopies: Array<{ header: string; value: string }>;
   comment: string;
+  matchState: "matched" | "unmatched";
+  locales: Array<
+    | { locale: string; state: "found"; value: string }
+    | { locale: string; state: "missing" }
+  >;
 }
+
+interface ParsedTranslationKeyRow {
+  key: string;
+  referenceCopies: Array<{ header: string; value: string }>;
+  comment: string;
+}
+
+type ParsedTranslationKeysTable =
+  | { state: "empty" }
+  | { state: "ready"; rows: ParsedTranslationKeyRow[] }
+  | { state: "unstructured"; content: unknown };
 
 export type TranslationKeysDetail =
   | { state: "empty" }
@@ -558,10 +575,17 @@ export async function getIssueTranslationKeys(issueKey: string): Promise<Transla
   });
   const issue = result.issues?.[0];
   if (!issue) throw new IssueNotFoundError(issueKey);
-  return parseTranslationKeysTable((issue.fields as Record<string, unknown>).customfield_11285);
+  const detail = parseTranslationKeysTable((issue.fields as Record<string, unknown>).customfield_11285);
+  if (detail.state !== "ready") return detail;
+
+  const translationValues = await getTranslationKeyValues(detail.rows.map((row) => row.key));
+  return {
+    state: "ready",
+    rows: detail.rows.map((row, index) => ({ ...row, ...translationValues[index] })),
+  };
 }
 
-export function parseTranslationKeysTable(raw: unknown): TranslationKeysDetail {
+export function parseTranslationKeysTable(raw: unknown): ParsedTranslationKeysTable {
   if (raw === null || raw === undefined) return { state: "empty" };
   if (!isValidAdfDocument(raw)) return { state: "unstructured", content: raw };
   if (!hasMeaningfulAdfContent(raw.content)) return { state: "empty" };
@@ -587,7 +611,7 @@ export function parseTranslationKeysTable(raw: unknown): TranslationKeysDetail {
   const referenceCopyIndexes = headers
     .map((header, index) => ({ header, index }))
     .filter(({ index }) => index !== keyIndex && index !== commentIndex);
-  const parsedRows: TranslationKeyRow[] = [];
+  const parsedRows: ParsedTranslationKeyRow[] = [];
   for (const dataRow of rows.slice(1)) {
     const cells = dataRow.content ?? [];
     if (cells.length === 0 || cells.every((cell) => !adfCellText(cell).trim())) continue;

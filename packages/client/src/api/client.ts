@@ -242,6 +242,11 @@ export interface TranslationKeyRow {
   key: string;
   referenceCopies: Array<{ header: string; value: string }>;
   comment: string;
+  matchState: "matched" | "unmatched";
+  locales: Array<
+    | { locale: string; state: "found"; value: string }
+    | { locale: string; state: "missing" }
+  >;
 }
 
 export type TranslationKeysDetail =
