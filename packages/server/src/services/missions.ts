@@ -105,6 +105,17 @@ export interface IssueCopyData {
   translationKeysState: "empty" | "initialized";
 }
 
+export interface TranslationKeyRow {
+  key: string;
+  referenceCopies: Array<{ header: string; value: string }>;
+  comment: string;
+}
+
+export type TranslationKeysDetail =
+  | { state: "empty" }
+  | { state: "ready"; rows: TranslationKeyRow[] }
+  | { state: "unstructured"; content: unknown };
+
 export type InitializeTranslationKeysResponse =
   | { outcome: "initialized"; copy: IssueCopyData }
   | { outcome: "already-initialized"; copy: IssueCopyData };
@@ -537,6 +548,77 @@ function buildIssueCopyData(fields: Record<string, unknown>): IssueCopyData {
   };
 }
 
+export async function getIssueTranslationKeys(issueKey: string): Promise<TranslationKeysDetail> {
+  if (!/^[A-Z][A-Z0-9_]*-\d+$/.test(issueKey)) throw new InvalidIssueKeyError();
+  const jira = getClient();
+  const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+    jql: `key = "${issueKey}"`,
+    maxResults: 1,
+    fields: ["customfield_11285"],
+  });
+  const issue = result.issues?.[0];
+  if (!issue) throw new IssueNotFoundError(issueKey);
+  return parseTranslationKeysTable((issue.fields as Record<string, unknown>).customfield_11285);
+}
+
+export function parseTranslationKeysTable(raw: unknown): TranslationKeysDetail {
+  if (raw === null || raw === undefined) return { state: "empty" };
+  if (!isValidAdfDocument(raw)) return { state: "unstructured", content: raw };
+  if (!hasMeaningfulAdfContent(raw.content)) return { state: "empty" };
+
+  const tables = raw.content.filter((node) => node.type === "table");
+  if (tables.length !== 1) return { state: "unstructured", content: raw };
+
+  const rows = tables[0].content ?? [];
+  if (rows.length === 0) return { state: "empty" };
+  if (rows.some((row) => row.type !== "tableRow")) {
+    return { state: "unstructured", content: raw };
+  }
+  const headerCells = rows[0]?.content;
+  if (!headerCells?.length) return { state: "unstructured", content: raw };
+
+  const headers = headerCells.map((node) => adfCellText(node));
+  const keyIndex = headers.findIndex((header) => header.trim().toLowerCase() === "key");
+  const commentIndex = headers.findIndex((header) => header.trim().toLowerCase() === "comment");
+  if (keyIndex < 0 || commentIndex < 0 || headers.some((header) => !header.trim())) {
+    return { state: "unstructured", content: raw };
+  }
+
+  const referenceCopyIndexes = headers
+    .map((header, index) => ({ header, index }))
+    .filter(({ index }) => index !== keyIndex && index !== commentIndex);
+  const parsedRows: TranslationKeyRow[] = [];
+  for (const dataRow of rows.slice(1)) {
+    const cells = dataRow.content ?? [];
+    if (cells.length === 0 || cells.every((cell) => !adfCellText(cell).trim())) continue;
+    if (cells.length !== headers.length) return { state: "unstructured", content: raw };
+    const key = adfCellText(cells[keyIndex]);
+    if (!key.trim()) return { state: "unstructured", content: raw };
+    parsedRows.push({
+      key,
+      referenceCopies: referenceCopyIndexes.map(({ header, index }) => ({
+        header,
+        value: adfCellText(cells[index]),
+      })),
+      comment: adfCellText(cells[commentIndex]),
+    });
+  }
+
+  return parsedRows.length > 0
+    ? { state: "ready", rows: parsedRows }
+    : { state: "empty" };
+}
+
+function adfCellText(node: AdfNode): string {
+  const textFrom = (current: AdfNode): string => {
+    if (typeof current.text === "string") return current.text;
+    if (current.type === "hardBreak") return "\n";
+    const childText = (current.content ?? []).map(textFrom);
+    return childText.join("");
+  };
+  return (node.content ?? []).map(textFrom).join("\n");
+}
+
 /** Validate only the ADF invariants DevMan relies on: a `doc` root, `version` 1, array `content`. */
 function isValidAdfDocument(raw: unknown): raw is AdfDocument {
   if (!raw || typeof raw !== "object") return false;
@@ -857,6 +939,13 @@ export class IssueNotFoundError extends Error {
   constructor(issueKey: string) {
     super(`Issue not found: ${issueKey}`);
     this.name = "IssueNotFoundError";
+  }
+}
+
+export class InvalidIssueKeyError extends Error {
+  constructor() {
+    super("Invalid Jira issue key");
+    this.name = "InvalidIssueKeyError";
   }
 }
 

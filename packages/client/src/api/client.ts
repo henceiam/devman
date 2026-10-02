@@ -238,6 +238,17 @@ export interface IssueCopyData {
   translationKeysState: "empty" | "initialized";
 }
 
+export interface TranslationKeyRow {
+  key: string;
+  referenceCopies: Array<{ header: string; value: string }>;
+  comment: string;
+}
+
+export type TranslationKeysDetail =
+  | { state: "empty" }
+  | { state: "ready"; rows: TranslationKeyRow[] }
+  | { state: "unstructured"; content: unknown };
+
 export type InitializeTranslationKeysResponse =
   | { outcome: "initialized"; copy: IssueCopyData }
   | { outcome: "already-initialized"; copy: IssueCopyData };
@@ -393,6 +404,10 @@ export const api = {
       }
       return res.json();
     },
+    getIssueTranslationKeys: (issueKey: string) =>
+      fetchJson<TranslationKeysDetail>(
+        `/missions/issues/${encodeURIComponent(issueKey)}/copy/translation-keys`,
+      ),
     updateColumns: async (epicKey: string, columns: string[]): Promise<void> => {
       const res = await fetch(`${API_BASE}/missions/${encodeURIComponent(epicKey)}/columns`, {
         method: "PATCH",

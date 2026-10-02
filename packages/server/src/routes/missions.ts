@@ -139,6 +139,23 @@ missionsRouter.patch("/stories/:storyKey", async (req: Request<{ storyKey: strin
   }
 });
 
+missionsRouter.get("/issues/:issueKey/copy/translation-keys", async (req: Request<{ issueKey: string }>, res: Response) => {
+  try {
+    const detail = await missionService.getIssueTranslationKeys(req.params.issueKey);
+    res.json(detail);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    if (error instanceof missionService.InvalidIssueKeyError) {
+      res.status(400).json({ error: message });
+    } else if (error instanceof missionService.IssueNotFoundError) {
+      res.status(404).json({ error: message });
+    } else {
+      console.error(`Missions GET /issues/${req.params.issueKey}/copy/translation-keys error:`, message);
+      res.status(500).json({ error: message });
+    }
+  }
+});
+
 missionsRouter.post("/issues/:issueKey/copy/translation-keys/initialize", async (req: Request<{ issueKey: string }>, res: Response) => {
   try {
     const { issueKey } = req.params;
