@@ -67,3 +67,14 @@ jiraRouter.get("/issues", async (req: Request, res: Response) => {
     res.status(500).json({ error: message });
   }
 });
+
+jiraRouter.get("/copy-progress", async (_req: Request, res: Response) => {
+  try {
+    const issues = await jiraService.getCopyProgress();
+    res.json({ issues });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    console.error("Jira /copy-progress error:", message);
+    res.status(500).json({ error: message });
+  }
+});
