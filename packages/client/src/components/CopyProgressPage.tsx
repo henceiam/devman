@@ -2,15 +2,15 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import {
   api,
   type CopyProgressIssue,
-  type TranslationKeyRow,
   type TranslationKeysDetail,
 } from "../api/client";
 import JiraLink from "./JiraLink";
+import TranslationKeyList from "./TranslationKeyList";
 
 type TranslationKeysState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "loaded"; detail: TranslationKeysDetail; selectedKey: string | null };
+  | { status: "loaded"; detail: TranslationKeysDetail };
 
 export default function CopyProgressPage() {
   const [issues, setIssues] = useState<CopyProgressIssue[]>([]);
@@ -44,11 +44,7 @@ export default function CopyProgressPage() {
       const detail = await api.missions.getIssueTranslationKeys(issueKey);
       setTranslationKeys((current) => ({
         ...current,
-        [issueKey]: {
-          status: "loaded",
-          detail,
-          selectedKey: detail.state === "ready" ? detail.rows[0]?.key ?? null : null,
-        },
+        [issueKey]: { status: "loaded", detail },
       }));
     } catch (err) {
       setTranslationKeys((current) => ({
@@ -154,16 +150,6 @@ export default function CopyProgressPage() {
                             issueKey={issue.key}
                             state={keyState}
                             onRetry={() => void loadTranslationKeys(issue.key)}
-                            onSelectKey={(selectedKey) => {
-                              setTranslationKeys((current) => {
-                                const existing = current[issue.key];
-                                if (existing?.status !== "loaded") return current;
-                                return {
-                                  ...current,
-                                  [issue.key]: { ...existing, selectedKey },
-                                };
-                              });
-                            }}
                           />
                         </td>
                       </tr>
@@ -190,12 +176,10 @@ function TranslationKeysExpansion({
   issueKey,
   state,
   onRetry,
-  onSelectKey,
 }: {
   issueKey: string;
   state: TranslationKeysState | undefined;
   onRetry: () => void;
-  onSelectKey: (key: string) => void;
 }) {
   if (!state || state.status === "loading") {
     return <p role="status" className="text-sm text-gray-500">Loading translation keys for {issueKey}…</p>;
@@ -233,124 +217,5 @@ function TranslationKeysExpansion({
     );
   }
 
-  const selectedRow = state.detail.rows.find((row) => row.key === state.selectedKey)
-    ?? state.detail.rows[0];
-
-  return (
-    <div className="grid gap-5 md:grid-cols-[minmax(12rem,0.35fr)_minmax(0,1fr)]">
-      <nav aria-label={`Translation keys for ${issueKey}`} className="space-y-1">
-        {state.detail.rows.map((row) => (
-          <button
-            key={row.key}
-            type="button"
-            aria-current={selectedRow?.key === row.key ? "true" : undefined}
-            onClick={() => onSelectKey(row.key)}
-            className={`block w-full rounded-md px-3 py-2 text-left font-mono text-sm ${
-              selectedRow?.key === row.key
-                ? "bg-blue-100 text-blue-900"
-                : "text-gray-700 hover:bg-white"
-            }`}
-          >
-            {row.key}
-          </button>
-        ))}
-      </nav>
-      {selectedRow && (
-        <section aria-label={`Details for ${selectedRow.key}`} className="min-w-0 space-y-4">
-          <div>
-            <h3 className="font-mono text-sm font-semibold text-gray-900">{selectedRow.key}</h3>
-            {selectedRow.comment && (
-              <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{selectedRow.comment}</p>
-            )}
-          </div>
-          <div>
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Reference copy</h4>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {selectedRow.referenceCopies.map((copy, index) => (
-                <article
-                  key={`${copy.header}-${index}`}
-                  className="rounded-md border border-gray-200 bg-white p-3"
-                >
-                  <h5 className="text-xs font-semibold text-gray-700">{copy.header}</h5>
-                  <p className="mt-1 whitespace-pre-wrap text-sm text-gray-800">{copy.value || "Missing value"}</p>
-                </article>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Base translation values</h4>
-            {selectedRow.matchState === "unmatched" && (
-              <p role="status" className="mb-2 text-sm text-amber-800">
-                No exact key match in the translations repository.
-              </p>
-            )}
-            <div className="grid gap-3 sm:grid-cols-2">
-              {selectedRow.locales.map((translation) => (
-                <LocaleTranslationCard
-                  key={`${selectedRow.key}-${translation.locale}`}
-                  translation={translation}
-                />
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-    </div>
-  );
-}
-
-function LocaleTranslationCard({
-  translation,
-}: {
-  translation: TranslationKeyRow["locales"][number];
-}) {
-  const [showOverrides, setShowOverrides] = useState(false);
-
-  return (
-    <article className="rounded-md border border-gray-200 bg-white p-3">
-      <h5 className="text-xs font-semibold text-gray-700">{translation.locale}</h5>
-      {translation.state === "found" ? (
-        <p className="mt-1 whitespace-pre-wrap text-sm text-gray-800">
-          {translation.value === "" ? "(empty string)" : translation.value}
-        </p>
-      ) : (
-        <p className="mt-1 text-sm text-gray-500">Missing value</p>
-      )}
-      {translation.overrides.length > 0 && (
-        <div className="mt-3 border-t border-gray-100 pt-2">
-          <div className="flex items-center justify-between gap-3">
-            <span className="rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
-              Overrides ({translation.overrides.length})
-            </span>
-            <button
-              type="button"
-              aria-expanded={showOverrides}
-              aria-label={`${showOverrides ? "Hide" : "Show"} overrides`}
-              onClick={() => setShowOverrides((shown) => !shown)}
-              className="text-xs font-medium text-blue-700 hover:text-blue-900"
-            >
-              {showOverrides ? "Hide values" : "Show overrides"}
-            </button>
-          </div>
-          {showOverrides && (
-            <ul className="mt-2 space-y-2">
-              {translation.overrides.map((override) => (
-                <li
-                  key={override.environment}
-                  className="rounded bg-gray-50 px-2 py-2 text-sm text-gray-700"
-                >
-                  <p className="text-xs font-semibold text-gray-600">
-                    Environment: {override.environment}
-                  </p>
-                  <p className="mt-1 whitespace-pre-wrap">
-                    {override.value === "" ? "(empty string)" : override.value}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
-    </article>
-  );
+  return <TranslationKeyList issueKey={issueKey} rows={state.detail.rows} />;
 }

@@ -96,26 +96,30 @@ describe("CopyProgressPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Show translation keys for EBBACKLOG-123" }));
 
-    expect(await screen.findAllByText("checkout.title")).toHaveLength(2);
-    expect(screen.getByText("Continue")).toBeInTheDocument();
-    expect(screen.getByText("Continue to checkout")).toBeInTheDocument();
-    expect(screen.getByText("Shown on the payment step")).toBeInTheDocument();
-    expect(screen.getByText("Copy")).toBeInTheDocument();
-    expect(screen.getByText("Copy - clinical")).toBeInTheDocument();
-    expect(screen.getByText("Base translation values")).toBeInTheDocument();
+    const titleKey = await screen.findByRole("button", { name: "checkout.title" });
+    expect(screen.getByRole("button", { name: "checkout.confirm" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getAllByRole("img", { name: "Reference copy Copy: Present" })).toHaveLength(2);
+    expect(screen.getByRole("img", { name: "Reference copy Copy - clinical: Present" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "en-GB: Present, 1 override(s)" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "fr-FR: Missing, 1 override(s)" })).toBeInTheDocument();
+    expect(screen.getByText("1 missing translations")).toBeInTheDocument();
+    expect(screen.queryByText("Continue in English")).not.toBeInTheDocument();
+
+    fireEvent.click(titleKey);
+    const details = screen.getByRole("region", { name: "Details for checkout.title" });
+    expect(details).toHaveTextContent("Continue");
+    expect(details).toHaveTextContent("Continue to checkout");
+    expect(details).toHaveTextContent("Shown on the payment step");
+    expect(screen.getByRole("rowheader", { name: "Copy" })).toBeInTheDocument();
+    expect(screen.getByRole("rowheader", { name: "Copy - clinical" })).toBeInTheDocument();
     expect(screen.getByText("Continue in English")).toBeInTheDocument();
-    expect(screen.getByText("fr-FR")).toBeInTheDocument();
-    expect(screen.getByText("Missing value")).toBeInTheDocument();
-    expect(screen.getAllByText("Overrides (1)")).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Show overrides" })).toHaveLength(2);
-    expect(screen.queryByText("Environment: prod")).not.toBeInTheDocument();
-    expect(screen.queryByText("Continue for production")).not.toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show overrides" })[0]);
-    expect(screen.getByText("Environment: prod")).toBeInTheDocument();
+    expect(screen.getByRole("rowheader", { name: "fr-FR" })).toBeInTheDocument();
+    expect(screen.getByText("Missing translation")).toBeInTheDocument();
+    expect(screen.getByText("prod")).toBeInTheDocument();
     expect(screen.getByText("Continue for production")).toBeInTheDocument();
-    fireEvent.click(screen.getAllByRole("button", { name: "Show overrides" })[0]);
-    expect(screen.getByText("Environment: stage")).toBeInTheDocument();
+    expect(screen.getByText("stage")).toBeInTheDocument();
     expect(screen.getByText("Continuer en préproduction")).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("button", { name: "checkout.confirm" }));
     expect(await screen.findByText("Confirm")).toBeInTheDocument();
     expect(screen.getByText("Submit payment")).toBeInTheDocument();
@@ -157,12 +161,51 @@ describe("CopyProgressPage", () => {
 
     await screen.findByText("Review localized copy");
     fireEvent.click(screen.getByRole("button", { name: "Show translation keys for EBBACKLOG-123" }));
-    expect(await screen.findByText("(empty string)")).toBeInTheDocument();
-    expect(screen.getByText("Missing value")).toBeInTheDocument();
-    expect(screen.queryByText(/^Overrides \(/)).not.toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "en-GB: Empty string" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "fr-FR: Missing" })).toBeInTheDocument();
+    expect(screen.getByText("Key not in repo")).toBeInTheDocument();
+    expect(screen.getByText("1 not in translations repo")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "checkout.unregistered" }));
+    fireEvent.click(screen.getByRole("button", { name: "Expand keys with problems" }));
+    expect(screen.getByText("(empty string)")).toBeInTheDocument();
+    expect(screen.getByText("Missing translation")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Environment overrides" })).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("No exact key match in the translations repository.");
+  });
+
+  it("hides unsupported locales from the overview but shows existing values in details", async () => {
+    vi.spyOn(api.jira, "getCopyProgress").mockResolvedValue({ issues: [issue] });
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        state: "ready",
+        rows: [{
+          key: "checkout.title",
+          referenceCopies: [{ header: "Copy", value: "Continue" }],
+          comment: "",
+          matchState: "matched",
+          locales: [
+            { locale: "da-DK", state: "missing", overrides: [] },
+            { locale: "en-GB", state: "found", value: "Continue", overrides: [] },
+            { locale: "nl-NL", state: "found", value: "Doorgaan", overrides: [] },
+            { locale: "uk-UA", state: "missing", overrides: [] },
+          ],
+        }],
+      }),
+    })));
+    render(<CopyProgressPage />);
+
+    await screen.findByText("Review localized copy");
+    fireEvent.click(screen.getByRole("button", { name: "Show translation keys for EBBACKLOG-123" }));
+
+    expect(await screen.findByText("No missing values")).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: /^(da-DK|nl-NL|uk-UA)/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "checkout.title" }));
+    expect(screen.queryByRole("rowheader", { name: "nl-NL" })).not.toBeInTheDocument();
+    expect(screen.getByText("Unsupported locales with values (1)")).toBeInTheDocument();
+    expect(screen.getByText(/Doorgaan/)).toBeInTheDocument();
+    expect(screen.queryByText("da-DK")).not.toBeInTheDocument();
   });
 
   it("shows a successful empty state without treating it as a load error", async () => {
@@ -215,7 +258,7 @@ describe("CopyProgressPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
 
-    expect(await screen.findByText("Continue in English")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "checkout.title" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(screen.getByText("In Progress")).toBeInTheDocument();
   });
