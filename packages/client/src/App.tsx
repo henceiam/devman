@@ -11,6 +11,7 @@ import PullRequestsLayout from "./components/PullRequestsLayout";
 import OpenPullRequestsPage from "./components/PullRequestsPage";
 import RecentlyClosedPullRequestsPage from "./components/RecentlyClosedPullRequestsPage";
 import UnreleasedPullRequestsPage from "./components/UnreleasedPullRequestsPage";
+import CopyProgressPage from "./components/CopyProgressPage";
 
 function Dashboard() {
   return (
@@ -78,6 +79,14 @@ export function AppContent() {
                 Devils
               </NavLink>
               <NavLink
+                to="/copy-progress"
+                className={({ isActive }) =>
+                  `text-sm font-medium ${isActive ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`
+                }
+              >
+                Copy &amp; Translations
+              </NavLink>
+              <NavLink
                 to="/diagnostics"
                 className={({ isActive }) =>
                   `text-sm font-medium ${isActive ? "text-blue-600" : "text-gray-500 hover:text-gray-700"}`
@@ -103,6 +112,7 @@ export function AppContent() {
           <Route path="/support" element={<SupportPage />} />
           <Route path="/launchpad" element={<LaunchpadPage />} />
           <Route path="/devils" element={<LaunchpadPage teamName="Devils" apiNamespace="devils" />} />
+          <Route path="/copy-progress" element={<CopyProgressPage />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
           <Route path="/pull-requests" element={<PullRequestsLayout />}>
             <Route index element={<OpenPullRequestsPage />} />

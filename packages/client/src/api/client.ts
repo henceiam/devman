@@ -36,6 +36,15 @@ export interface JiraIssue {
   updated: string;
 }
 
+export interface CopyProgressIssue {
+  key: string;
+  summary: string;
+  status: string;
+  copyStatus: string | null;
+  epicShortName: string | null;
+  updated: string;
+}
+
 export interface GitHubRepo {
   id: number;
   name: string;
@@ -293,6 +302,8 @@ export const api = {
       fetchJson<{ issues: JiraIssue[] }>(
         `/jira/issues?project=${encodeURIComponent(project)}&maxResults=${maxResults}`,
       ),
+    getCopyProgress: () =>
+      fetchJson<{ issues: CopyProgressIssue[] }>("/jira/copy-progress"),
     runDiagnostics: () =>
       fetchJson<{ steps: DiagnosticStep[] }>("/jira/diagnostics"),
   },

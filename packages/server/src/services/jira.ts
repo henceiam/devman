@@ -1,5 +1,6 @@
 import { Version3Client } from "jira.js";
 import { config } from "../config.js";
+import { COPY_PROGRESS_STATUS_ORDER, filterAndSortCopyProgress } from "./copyProgress.js";
 
 let client: Version3Client | null = null;
 
@@ -286,4 +287,145 @@ export async function getIssues(projectKey: string, maxResults = 50) {
       updated: issue.fields.updated,
     })),
   };
+}
+
+export interface CopyProgressItem {
+  key: string;
+  summary: string;
+  status: string;
+  copyStatus: string | null;
+  epicShortName: string | null;
+  updated: string;
+}
+
+const COPY_PROGRESS_PAGE_SIZE = 100;
+
+function readCopyStatus(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || !("value" in value)) return null;
+  return typeof value.value === "string" && value.value.length > 0 ? value.value : null;
+}
+
+function readEpicShortName(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+async function getIssuesByKeys(keys: string[]): Promise<Array<{ key?: string; fields: Record<string, unknown> }>> {
+  if (keys.length === 0) return [];
+
+  const jira = getClient();
+  const issues: Array<{ key?: string; fields: Record<string, unknown> }> = [];
+  for (let index = 0; index < keys.length; index += COPY_PROGRESS_PAGE_SIZE) {
+    const batch = keys.slice(index, index + COPY_PROGRESS_PAGE_SIZE);
+    const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+      jql: `key in (${batch.map((key) => `"${key}"`).join(", ")})`,
+      maxResults: batch.length,
+      fields: ["issuetype", "parent", "customfield_10002"],
+    });
+    for (const issue of result.issues ?? []) {
+      issues.push({ key: issue.key, fields: issue.fields as Record<string, unknown> });
+    }
+  }
+  return issues;
+}
+
+export async function getCopyProgress(): Promise<CopyProgressItem[]> {
+  const jira = getClient();
+  const statuses = COPY_PROGRESS_STATUS_ORDER.map((status) => `"${status}"`).join(", ");
+  const jql = `project = "EBBACKLOG" AND "Product teams[Checkboxes]" in (Radicals) AND labels in ("copy", "copy-clinical") AND status in (${statuses}) ORDER BY updated DESC`;
+  const rawIssues: Array<{ key?: string; fields: Record<string, unknown> }> = [];
+  let nextPageToken: string | undefined;
+
+  while (true) {
+    const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+      jql,
+      maxResults: COPY_PROGRESS_PAGE_SIZE,
+      ...(nextPageToken ? { nextPageToken } : {}),
+      fields: [
+        "summary",
+        "status",
+        "updated",
+        "issuetype",
+        "parent",
+        "customfield_11302",
+        "customfield_10002",
+      ],
+    });
+    const page = result.issues ?? [];
+    rawIssues.push(...page.map((issue) => ({
+      key: issue.key,
+      fields: issue.fields as Record<string, unknown>,
+    })));
+    nextPageToken = result.nextPageToken ?? undefined;
+    if (!nextPageToken) break;
+  }
+
+  const parentKeys = new Set<string>();
+  for (const issue of rawIssues) {
+    const fields = issue.fields;
+    const issueType = fields.issuetype as { name?: string } | undefined;
+    const parent = fields.parent as { key?: string } | undefined;
+    if (issueType?.name !== "Epic" && parent?.key) parentKeys.add(parent.key);
+  }
+
+  const parentIssues = new Map<string, Record<string, unknown>>();
+  let keysToFetch = [...parentKeys];
+  while (keysToFetch.length > 0) {
+    const fetched = await getIssuesByKeys(keysToFetch);
+    const nextKeys = new Set<string>();
+    for (const issue of fetched) {
+      if (!issue.key) continue;
+      parentIssues.set(issue.key, issue.fields);
+      const issueType = issue.fields.issuetype as { name?: string } | undefined;
+      const parent = issue.fields.parent as { key?: string } | undefined;
+      if (issueType?.name !== "Epic" && parent?.key && !parentIssues.has(parent.key)) {
+        nextKeys.add(parent.key);
+      }
+    }
+    keysToFetch = [...nextKeys];
+  }
+
+  const items = rawIssues.flatMap((issue) => {
+    if (!issue.key) return [];
+    const fields = issue.fields;
+    const status = fields.status as {
+      name?: string;
+      statusCategory?: { key?: string };
+    } | undefined;
+    if (!status?.name) return [];
+
+    const issueType = fields.issuetype as { name?: string } | undefined;
+    const immediateParent = fields.parent as { key?: string } | undefined;
+    let epicShortName: string | null = null;
+
+    if (issueType?.name === "Epic") {
+      epicShortName = readEpicShortName(fields.customfield_10002);
+    } else {
+      let ancestorKey = immediateParent?.key;
+      const visited = new Set<string>();
+      while (ancestorKey && !visited.has(ancestorKey)) {
+        visited.add(ancestorKey);
+        const ancestor = parentIssues.get(ancestorKey);
+        if (!ancestor) break;
+        const ancestorType = ancestor.issuetype as { name?: string } | undefined;
+        if (ancestorType?.name === "Epic") {
+          epicShortName = readEpicShortName(ancestor.customfield_10002);
+          break;
+        }
+        const parent = ancestor.parent as { key?: string } | undefined;
+        ancestorKey = parent?.key;
+      }
+    }
+
+    return [{
+      key: issue.key,
+      summary: typeof fields.summary === "string" ? fields.summary : "",
+      status: status.name,
+      statusCategory: status.statusCategory?.key ?? "",
+      copyStatus: readCopyStatus(fields.customfield_11302),
+      epicShortName,
+      updated: typeof fields.updated === "string" ? fields.updated : "",
+    }];
+  });
+
+  return filterAndSortCopyProgress(items).map(({ statusCategory: _statusCategory, ...item }) => item);
 }
