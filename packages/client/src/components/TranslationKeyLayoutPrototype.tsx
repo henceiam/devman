@@ -24,6 +24,7 @@ type PrototypeIssue = {
   copyStatus: string;
   epic: string;
   loadError?: boolean;
+  unstructured?: { reason: string; raw: string };
   keys: TranslationKey[];
 };
 
@@ -124,6 +125,18 @@ const issues: PrototypeIssue[] = [
     copyStatus: "Translation - ready to start",
     epic: "Reminders",
     loadError: true,
+    keys: [],
+  },
+  {
+    key: "EBBACKLOG-737",
+    summary: "Rewrite onboarding welcome texts",
+    status: "In Progress",
+    copyStatus: "Copy - in progress",
+    epic: "Onboarding",
+    unstructured: {
+      reason: "The field has content, but no table with a Key column was found.",
+      raw: 'Keys:\n- onboarding.welcome.title (sv-SE: "Välkommen")\n- onboarding.welcome.body\n\nTODO: ask Anna which texts are still missing.\n\n{"type":"paragraph","content":[{"type":"text","text":"Pasted from Slack"}]}',
+    },
     keys: [],
   },
 ];
@@ -256,6 +269,20 @@ function IssueDetail({ issue }: { issue: PrototypeIssue }) {
         >
           Retry
         </button>
+      </div>
+    );
+  }
+
+  if (issue.unstructured) {
+    return (
+      <div className="rounded-lg border border-amber-300 bg-amber-50 p-5">
+        <h3 role="alert" className="font-semibold text-amber-900">Translation keys are not in the expected format</h3>
+        <p className="mt-1 text-sm text-amber-900">
+          {issue.unstructured.reason} No keys were looked up in the translations source. Showing the raw Jira content instead; fix it in Jira to see key details here.
+        </p>
+        <pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md border border-amber-200 bg-white p-3 font-mono text-xs text-gray-800">
+          {issue.unstructured.raw}
+        </pre>
       </div>
     );
   }
