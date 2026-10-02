@@ -1,5 +1,10 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { api, type CopyProgressIssue, type TranslationKeysDetail } from "../api/client";
+import {
+  api,
+  type CopyProgressIssue,
+  type TranslationKeyRow,
+  type TranslationKeysDetail,
+} from "../api/client";
 import JiraLink from "./JiraLink";
 
 type TranslationKeysState =
@@ -281,24 +286,71 @@ function TranslationKeysExpansion({
             )}
             <div className="grid gap-3 sm:grid-cols-2">
               {selectedRow.locales.map((translation) => (
-                <article
-                  key={translation.locale}
-                  className="rounded-md border border-gray-200 bg-white p-3"
-                >
-                  <h5 className="text-xs font-semibold text-gray-700">{translation.locale}</h5>
-                  {translation.state === "found" ? (
-                    <p className="mt-1 whitespace-pre-wrap text-sm text-gray-800">
-                      {translation.value === "" ? "(empty string)" : translation.value}
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-sm text-gray-500">Missing value</p>
-                  )}
-                </article>
+                <LocaleTranslationCard
+                  key={`${selectedRow.key}-${translation.locale}`}
+                  translation={translation}
+                />
               ))}
             </div>
           </div>
         </section>
       )}
     </div>
+  );
+}
+
+function LocaleTranslationCard({
+  translation,
+}: {
+  translation: TranslationKeyRow["locales"][number];
+}) {
+  const [showOverrides, setShowOverrides] = useState(false);
+
+  return (
+    <article className="rounded-md border border-gray-200 bg-white p-3">
+      <h5 className="text-xs font-semibold text-gray-700">{translation.locale}</h5>
+      {translation.state === "found" ? (
+        <p className="mt-1 whitespace-pre-wrap text-sm text-gray-800">
+          {translation.value === "" ? "(empty string)" : translation.value}
+        </p>
+      ) : (
+        <p className="mt-1 text-sm text-gray-500">Missing value</p>
+      )}
+      {translation.overrides.length > 0 && (
+        <div className="mt-3 border-t border-gray-100 pt-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="rounded bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800">
+              Overrides ({translation.overrides.length})
+            </span>
+            <button
+              type="button"
+              aria-expanded={showOverrides}
+              aria-label={`${showOverrides ? "Hide" : "Show"} overrides`}
+              onClick={() => setShowOverrides((shown) => !shown)}
+              className="text-xs font-medium text-blue-700 hover:text-blue-900"
+            >
+              {showOverrides ? "Hide values" : "Show overrides"}
+            </button>
+          </div>
+          {showOverrides && (
+            <ul className="mt-2 space-y-2">
+              {translation.overrides.map((override) => (
+                <li
+                  key={override.environment}
+                  className="rounded bg-gray-50 px-2 py-2 text-sm text-gray-700"
+                >
+                  <p className="text-xs font-semibold text-gray-600">
+                    Environment: {override.environment}
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap">
+                    {override.value === "" ? "(empty string)" : override.value}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </article>
   );
 }

@@ -57,8 +57,17 @@ describe("CopyProgressPage", () => {
           comment: "Shown on the payment step",
           matchState: "matched",
           locales: [
-            { locale: "en-GB", state: "found", value: "Continue in English" },
-            { locale: "fr-FR", state: "missing" },
+            {
+              locale: "en-GB",
+              state: "found",
+              value: "Continue in English",
+              overrides: [{ environment: "prod", value: "Continue for production" }],
+            },
+            {
+              locale: "fr-FR",
+              state: "missing",
+              overrides: [{ environment: "stage", value: "Continuer en préproduction" }],
+            },
           ],
         },
         {
@@ -66,7 +75,12 @@ describe("CopyProgressPage", () => {
           referenceCopies: [{ header: "Copy", value: "Confirm" }],
           comment: "Submit payment",
           matchState: "matched",
-          locales: [{ locale: "en-GB", state: "found", value: "Confirm in English" }],
+          locales: [{
+            locale: "en-GB",
+            state: "found",
+            value: "Confirm in English",
+            overrides: [],
+          }],
         },
       ],
     };
@@ -92,6 +106,16 @@ describe("CopyProgressPage", () => {
     expect(screen.getByText("Continue in English")).toBeInTheDocument();
     expect(screen.getByText("fr-FR")).toBeInTheDocument();
     expect(screen.getByText("Missing value")).toBeInTheDocument();
+    expect(screen.getAllByText("Overrides (1)")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Show overrides" })).toHaveLength(2);
+    expect(screen.queryByText("Environment: prod")).not.toBeInTheDocument();
+    expect(screen.queryByText("Continue for production")).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show overrides" })[0]);
+    expect(screen.getByText("Environment: prod")).toBeInTheDocument();
+    expect(screen.getByText("Continue for production")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Show overrides" })[0]);
+    expect(screen.getByText("Environment: stage")).toBeInTheDocument();
+    expect(screen.getByText("Continuer en préproduction")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "checkout.confirm" }));
     expect(await screen.findByText("Confirm")).toBeInTheDocument();
     expect(screen.getByText("Submit payment")).toBeInTheDocument();
@@ -112,8 +136,8 @@ describe("CopyProgressPage", () => {
             comment: "",
             matchState: "matched",
             locales: [
-              { locale: "en-GB", state: "found", value: "" },
-              { locale: "fr-FR", state: "missing" },
+              { locale: "en-GB", state: "found", value: "", overrides: [] },
+              { locale: "fr-FR", state: "missing", overrides: [] },
             ],
           },
           {
@@ -122,8 +146,8 @@ describe("CopyProgressPage", () => {
             comment: "",
             matchState: "unmatched",
             locales: [
-              { locale: "en-GB", state: "missing" },
-              { locale: "fr-FR", state: "missing" },
+              { locale: "en-GB", state: "missing", overrides: [] },
+              { locale: "fr-FR", state: "missing", overrides: [] },
             ],
           },
         ],
@@ -135,6 +159,7 @@ describe("CopyProgressPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show translation keys for EBBACKLOG-123" }));
     expect(await screen.findByText("(empty string)")).toBeInTheDocument();
     expect(screen.getByText("Missing value")).toBeInTheDocument();
+    expect(screen.queryByText(/^Overrides \(/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "checkout.unregistered" }));
     expect(screen.getByRole("status")).toHaveTextContent("No exact key match in the translations repository.");
@@ -172,7 +197,12 @@ describe("CopyProgressPage", () => {
             referenceCopies: [{ header: "Copy", value: "Continue" }],
             comment: "",
             matchState: "matched",
-            locales: [{ locale: "en-GB", state: "found", value: "Continue in English" }],
+            locales: [{
+              locale: "en-GB",
+              state: "found",
+              value: "Continue in English",
+              overrides: [],
+            }],
           }],
         }),
       });

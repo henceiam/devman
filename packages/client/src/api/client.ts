@@ -244,8 +244,17 @@ export interface TranslationKeyRow {
   comment: string;
   matchState: "matched" | "unmatched";
   locales: Array<
-    | { locale: string; state: "found"; value: string }
-    | { locale: string; state: "missing" }
+    | {
+        locale: string;
+        state: "found";
+        value: string;
+        overrides: Array<{ environment: string; value: string }>;
+      }
+    | {
+        locale: string;
+        state: "missing";
+        overrides: Array<{ environment: string; value: string }>;
+      }
   >;
 }
 

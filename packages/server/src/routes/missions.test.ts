@@ -25,6 +25,43 @@ afterEach(() => {
 });
 
 describe("GET /api/missions/issues/:issueKey/copy/translation-keys", () => {
+  it("returns per-locale environment overrides with translation keys", async () => {
+    vi.spyOn(missionService, "getIssueTranslationKeys").mockResolvedValue({
+      state: "ready",
+      rows: [{
+        key: "checkout.title",
+        referenceCopies: [{ header: "Copy", value: "Continue" }],
+        comment: "",
+        matchState: "matched",
+        locales: [{
+          locale: "fr-FR",
+          state: "missing",
+          overrides: [{ environment: "demo", value: "Continuer" }],
+        }],
+      }],
+    });
+
+    await withServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/api/missions/issues/EBBACKLOG-123/copy/translation-keys`);
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        state: "ready",
+        rows: [{
+          key: "checkout.title",
+          referenceCopies: [{ header: "Copy", value: "Continue" }],
+          comment: "",
+          matchState: "matched",
+          locales: [{
+            locale: "fr-FR",
+            state: "missing",
+            overrides: [{ environment: "demo", value: "Continuer" }],
+          }],
+        }],
+      });
+    });
+  });
+
   it("returns an explicit successful empty state", async () => {
     vi.spyOn(missionService, "getIssueTranslationKeys").mockResolvedValue({ state: "empty" });
 

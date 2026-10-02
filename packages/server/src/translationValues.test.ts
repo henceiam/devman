@@ -11,6 +11,7 @@ describe("getTranslationKeyValues", () => {
           "en-GB": { "checkout.title": "Continue" },
           "fr-FR": { "checkout.title": "Continuer" },
         },
+        environmentOverrides: {},
       }),
     );
 
@@ -18,15 +19,15 @@ describe("getTranslationKeyValues", () => {
       {
         matchState: "matched",
         locales: [
-          { locale: "en-GB", state: "found", value: "Continue" },
-          { locale: "fr-FR", state: "found", value: "Continuer" },
+          { locale: "en-GB", state: "found", value: "Continue", overrides: [] },
+          { locale: "fr-FR", state: "found", value: "Continuer", overrides: [] },
         ],
       },
       {
         matchState: "unmatched",
         locales: [
-          { locale: "en-GB", state: "missing" },
-          { locale: "fr-FR", state: "missing" },
+          { locale: "en-GB", state: "missing", overrides: [] },
+          { locale: "fr-FR", state: "missing", overrides: [] },
         ],
       },
     ]);
@@ -41,6 +42,7 @@ describe("getTranslationKeyValues", () => {
           "en-GB": { "checkout.title": "" },
           "fr-FR": { "checkout.title": null, "checkout.subtitle": null },
         },
+        environmentOverrides: {},
       }),
     );
 
@@ -48,15 +50,15 @@ describe("getTranslationKeyValues", () => {
       {
         matchState: "matched",
         locales: [
-          { locale: "en-GB", state: "found", value: "" },
-          { locale: "fr-FR", state: "missing" },
+          { locale: "en-GB", state: "found", value: "", overrides: [] },
+          { locale: "fr-FR", state: "missing", overrides: [] },
         ],
       },
       {
         matchState: "matched",
         locales: [
-          { locale: "en-GB", state: "missing" },
-          { locale: "fr-FR", state: "missing" },
+          { locale: "en-GB", state: "missing", overrides: [] },
+          { locale: "fr-FR", state: "missing", overrides: [] },
         ],
       },
     ]);
@@ -68,5 +70,56 @@ describe("getTranslationKeyValues", () => {
         throw new Error("GitHub unavailable");
       }),
     ).rejects.toThrow("GitHub unavailable");
+  });
+
+  it("returns environment overrides even when the base locale value is missing", async () => {
+    const result = await getTranslationKeyValues(
+      ["checkout.title", "checkout.subtitle"],
+      async () => ({
+        metadataKeys: ["checkout.title", "checkout.subtitle"],
+        locales: {
+          "en-GB": { "checkout.title": "Continue" },
+          "fr-FR": { "checkout.title": null },
+        },
+        environmentOverrides: {
+          prod: {
+            "en-GB": { "checkout.title": "Continue to checkout" },
+            "fr-FR": { "checkout.title": "Continuer" },
+          },
+          stage: {
+            "en-GB": { "checkout.title": "" },
+          },
+        },
+      }),
+    );
+
+    expect(result).toEqual([
+      {
+        matchState: "matched",
+        locales: [
+          {
+            locale: "en-GB",
+            state: "found",
+            value: "Continue",
+            overrides: [
+              { environment: "prod", value: "Continue to checkout" },
+              { environment: "stage", value: "" },
+            ],
+          },
+          {
+            locale: "fr-FR",
+            state: "missing",
+            overrides: [{ environment: "prod", value: "Continuer" }],
+          },
+        ],
+      },
+      {
+        matchState: "matched",
+        locales: [
+          { locale: "en-GB", state: "missing", overrides: [] },
+          { locale: "fr-FR", state: "missing", overrides: [] },
+        ],
+      },
+    ]);
   });
 });

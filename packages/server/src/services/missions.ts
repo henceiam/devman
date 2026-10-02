@@ -1,7 +1,7 @@
 import { Version3Client } from "jira.js";
 import { config } from "../config.js";
 import { getPrWithReviews } from "./github.js";
-import { getTranslationKeyValues } from "./translations.js";
+import { getTranslationKeyValues, type TranslationLocaleValue } from "./translations.js";
 
 let client: Version3Client | null = null;
 
@@ -111,10 +111,7 @@ export interface TranslationKeyRow {
   referenceCopies: Array<{ header: string; value: string }>;
   comment: string;
   matchState: "matched" | "unmatched";
-  locales: Array<
-    | { locale: string; state: "found"; value: string }
-    | { locale: string; state: "missing" }
-  >;
+  locales: TranslationLocaleValue[];
 }
 
 interface ParsedTranslationKeyRow {

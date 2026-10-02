@@ -1,9 +1,11 @@
 import { Octokit } from "@octokit/rest";
 import { config } from "../config.js";
 import { getIssueGroupingByKeys } from "./jira.js";
-import type { BaseTranslationSnapshot } from "./translations.js";
+import type { TranslationSnapshot } from "./translations.js";
 
 let client: Octokit | null = null;
+
+const TRANSLATION_ENVIRONMENTS = ["demo", "prod", "stage"] as const;
 
 function getClient(): Octokit {
   if (!client) {
@@ -48,7 +50,7 @@ export async function getPrWithReviews(owner: string, repo: string, prNumber: nu
   };
 }
 
-export async function getBaseTranslationSnapshot(): Promise<BaseTranslationSnapshot> {
+export async function getTranslationSnapshot(): Promise<TranslationSnapshot> {
   const octokit = getClient();
   const [baseContents, metadataContent] = await Promise.all([
     octokit.repos.getContent({ owner: "DoctrinAB", repo: "translations", path: "base" }),
@@ -86,9 +88,27 @@ export async function getBaseTranslationSnapshot(): Promise<BaseTranslationSnaps
     return [locale, values] as const;
   }));
 
+  const environmentResults = await Promise.all(TRANSLATION_ENVIRONMENTS.map(async (environment) => {
+    const localeResults = await Promise.all(localeNames.map(async (locale) => {
+      const path = `${environment}/${locale}/root.json`;
+      const response = await octokit.repos.getContent({
+        owner: "DoctrinAB",
+        repo: "translations",
+        path,
+      });
+      const values = parseGitHubJsonContent(response.data, path);
+      if (!isTranslationRecord(values)) {
+        throw new Error(`The translations repository has invalid ${environment} values in ${path}`);
+      }
+      return [locale, values] as const;
+    }));
+    return [environment, Object.fromEntries(localeResults)] as const;
+  }));
+
   return {
     metadataKeys: Object.keys(metadata),
     locales: Object.fromEntries(localeResults),
+    environmentOverrides: Object.fromEntries(environmentResults),
   };
 }
 
