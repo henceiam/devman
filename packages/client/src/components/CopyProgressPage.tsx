@@ -7,6 +7,8 @@ import {
 import JiraLink from "./JiraLink";
 import TranslationKeyList from "./TranslationKeyList";
 
+const TRANSLATION_DONE = "Translation - done";
+
 type TranslationKeysState =
   | { status: "loading" }
   | { status: "error"; message: string }
@@ -19,6 +21,7 @@ export default function CopyProgressPage() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [expandedIssues, setExpandedIssues] = useState<Set<string>>(() => new Set());
   const [translationKeys, setTranslationKeys] = useState<Record<string, TranslationKeysState>>({});
+  const [hideDone, setHideDone] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -37,6 +40,22 @@ export default function CopyProgressPage() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // Keyboard shortcuts: R = refresh, H = toggle hiding "Translation - done" issues
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      const target = e.target;
+      if (target instanceof Element && target.closest("input, select, textarea, [contenteditable='true']")) return;
+      if (e.key === "r" || e.key === "R") void refresh();
+      else if (e.key === "h" || e.key === "H") setHideDone((prev) => !prev);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [refresh]);
+
+  const doneCount = issues.filter((issue) => issue.copyStatus === TRANSLATION_DONE).length;
+  const visibleIssues = hideDone ? issues.filter((issue) => issue.copyStatus !== TRANSLATION_DONE) : issues;
 
   const loadTranslationKeys = async (issueKey: string) => {
     setTranslationKeys((current) => ({ ...current, [issueKey]: { status: "loading" } }));
@@ -81,6 +100,15 @@ export default function CopyProgressPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <span className="flex items-center gap-3 text-[11px] text-gray-400">
+            {hideDone && doneCount > 0 && (
+              <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-yellow-700">
+                {doneCount} translation done hidden
+              </span>
+            )}
+            <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5">R</kbd> refresh</span>
+            <span><kbd className="rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5">H</kbd> {hideDone ? "show" : "hide"} done</span>
+          </span>
           {lastRefreshed && (
             <span className="text-xs text-gray-500">
               Updated {lastRefreshed.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -118,7 +146,7 @@ export default function CopyProgressPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {issues.map((issue) => {
+              {visibleIssues.map((issue) => {
                 const isExpanded = expandedIssues.has(issue.key);
                 const keyState = translationKeys[issue.key];
                 return (
@@ -157,10 +185,10 @@ export default function CopyProgressPage() {
                   </Fragment>
                 );
               })}
-              {issues.length === 0 && !loading && (
+              {visibleIssues.length === 0 && !loading && (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
-                    No matching Jira issues.
+                    {issues.length === 0 ? "No matching Jira issues." : "All matching issues are Translation - done (press H to show)."}
                   </td>
                 </tr>
               )}

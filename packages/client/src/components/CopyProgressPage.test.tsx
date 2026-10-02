@@ -43,6 +43,42 @@ describe("CopyProgressPage", () => {
     expect(screen.getByText("Review localized copy")).toBeInTheDocument();
   });
 
+  it("refreshes on R and ignores R typed into form fields or with modifiers", async () => {
+    const getCopyProgress = vi.spyOn(api.jira, "getCopyProgress").mockResolvedValue({ issues: [issue] });
+    render(<CopyProgressPage />);
+    await screen.findByText("Review localized copy");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Refresh" })).toBeEnabled());
+
+    fireEvent.keyDown(window, { key: "r", metaKey: true });
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    fireEvent.keyDown(input, { key: "r" });
+    input.remove();
+    expect(getCopyProgress).toHaveBeenCalledTimes(1);
+
+    fireEvent.keyDown(window, { key: "r" });
+    await waitFor(() => expect(getCopyProgress).toHaveBeenCalledTimes(2));
+  });
+
+  it("toggles hiding Translation - done issues with H", async () => {
+    vi.spyOn(api.jira, "getCopyProgress").mockResolvedValue({
+      issues: [
+        issue,
+        { ...issue, key: "EBBACKLOG-456", summary: "Already translated", copyStatus: "Translation - done" },
+      ],
+    });
+    render(<CopyProgressPage />);
+    expect(await screen.findByText("Already translated")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "h" });
+    expect(screen.queryByText("Already translated")).not.toBeInTheDocument();
+    expect(screen.getByText("Review localized copy")).toBeInTheDocument();
+    expect(screen.getByText("1 translation done hidden")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "H" });
+    expect(screen.getByText("Already translated")).toBeInTheDocument();
+  });
+
   it("loads an issue's keys on expansion and keeps reference-copy columns distinct", async () => {
     vi.spyOn(api.jira, "getCopyProgress").mockResolvedValue({ issues: [issue] });
     const keyDetails = {
