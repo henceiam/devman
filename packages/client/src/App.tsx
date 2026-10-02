@@ -12,6 +12,7 @@ import OpenPullRequestsPage from "./components/PullRequestsPage";
 import RecentlyClosedPullRequestsPage from "./components/RecentlyClosedPullRequestsPage";
 import UnreleasedPullRequestsPage from "./components/UnreleasedPullRequestsPage";
 import CopyProgressPage from "./components/CopyProgressPage";
+import TranslationKeyLayoutPrototype from "./components/TranslationKeyLayoutPrototype";
 
 function Dashboard() {
   return (
@@ -113,6 +114,7 @@ export function AppContent() {
           <Route path="/launchpad" element={<LaunchpadPage />} />
           <Route path="/devils" element={<LaunchpadPage teamName="Devils" apiNamespace="devils" />} />
           <Route path="/copy-progress" element={<CopyProgressPage />} />
+          <Route path="/prototype/translation-key-layout" element={<TranslationKeyLayoutPrototype />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
           <Route path="/pull-requests" element={<PullRequestsLayout />}>
             <Route index element={<OpenPullRequestsPage />} />
