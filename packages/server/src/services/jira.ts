@@ -268,6 +268,33 @@ export async function runDiagnostics(): Promise<DiagnosticStep[]> {
   return steps;
 }
 
+const DEFAULT_SEARCH_FIELDS = ["summary", "status", "assignee", "priority", "issuetype", "updated"];
+
+export interface JiraSearchIssue {
+  key: string;
+  fields: Record<string, unknown>;
+}
+
+export async function searchIssues(
+  jql: string,
+  maxResults = 50,
+  fields: string[] = DEFAULT_SEARCH_FIELDS,
+): Promise<{ issues: JiraSearchIssue[]; nextPageToken: string | null }> {
+  const jira = getClient();
+  const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+    jql,
+    maxResults,
+    fields,
+  });
+  return {
+    issues: (result.issues ?? []).map((issue) => ({
+      key: issue.key ?? "",
+      fields: issue.fields as Record<string, unknown>,
+    })),
+    nextPageToken: result.nextPageToken ?? null,
+  };
+}
+
 export async function getIssues(projectKey: string, maxResults = 50) {
   const jira = getClient();
   const result = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({

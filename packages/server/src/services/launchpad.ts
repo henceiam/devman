@@ -219,6 +219,43 @@ export async function getLaunchpadInProgress(team: string): Promise<InProgressIt
     return null;
   }
 
+  // ── Mission filtering ────────────────────────────────────────────────────
+  // Build the set of epic keys that carry the "mission" label. Start with the
+  // epics already in the result, then fetch labels for any referenced parent
+  // epic that isn't in the result (those can still be missions).
+  const missionEpicKeys = new Set(
+    issues
+      .filter((i) => i.fields.issuetype?.name === "Epic")
+      .filter((i) => ((i.fields as Record<string, unknown>).labels as string[] | null ?? []).includes("mission"))
+      .map((i) => i.key!)
+  );
+  const referencedEpicKeys = new Set(
+    issues
+      .filter((i) => i.fields.issuetype?.name !== "Epic")
+      .map((i) => getEpicKey(i))
+      .filter((k): k is string => k !== null)
+  );
+  const unfetchedEpicKeys = [...referencedEpicKeys].filter(
+    (k) => !epicKeys.has(k) && !missionEpicKeys.has(k)
+  );
+  if (unfetchedEpicKeys.length > 0) {
+    try {
+      const epicLabelResult = await jira.issueSearch.searchForIssuesUsingJqlEnhancedSearch({
+        jql: `issue in (${unfetchedEpicKeys.join(", ")})`,
+        maxResults: Math.min(unfetchedEpicKeys.length, 200),
+        fields: ["labels"],
+      });
+      for (const epic of epicLabelResult.issues ?? []) {
+        const labels = ((epic.fields as Record<string, unknown>).labels as string[] | null) ?? [];
+        if (labels.includes("mission")) {
+          missionEpicKeys.add(epic.key!);
+        }
+      }
+    } catch {
+      // Mission filtering on parent epics is best-effort
+    }
+  }
+
   // Build story progress map for epics via a batch child-story query
   const epicKeyList = [...epicKeys];
   const epicProgressMap = new Map<string, { done: number; inProgress: number; total: number }>();
@@ -367,6 +404,16 @@ export async function getLaunchpadInProgress(team: string): Promise<InProgressIt
   }
 
   return issues
+    // Filter out missions: the issue itself has the "mission" label, or its
+    // parent epic does.
+    .filter((issue) => {
+      const labels = (issue.fields as Record<string, unknown>).labels as string[] | null;
+      if (labels?.includes("mission")) return false;
+      if (issue.fields.issuetype?.name === "Epic") return true;
+      const epicKey = getEpicKey(issue);
+      if (epicKey && missionEpicKeys.has(epicKey)) return false;
+      return true;
+    })
     // Filter out stories whose epic is already shown in the list
     .filter((issue) => {
       if (issue.fields.issuetype?.name === "Epic") return true;

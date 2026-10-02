@@ -373,7 +373,7 @@ export default function StoryDetailModal({ storyKey, hideDone, onClose, closeOnE
                 GitHub
               </button>
             )}
-            {detail.labels.includes("wayfinder:map") && (
+            {(detail.labels.includes("wayfinder:map") || detail.labels.includes("wayfinder-map")) && (
               <button
                 onClick={handleWayfinderTab}
                 className={`border-b-2 px-3 py-2 text-xs font-medium transition ${

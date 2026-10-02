@@ -36,6 +36,16 @@ export interface JiraIssue {
   updated: string;
 }
 
+export interface JiraSearchIssue {
+  key: string;
+  fields: Record<string, unknown>;
+}
+
+export interface JiraSearchResponse {
+  issues: JiraSearchIssue[];
+  nextPageToken: string | null;
+}
+
 export interface GitHubRepo {
   id: number;
   name: string;
@@ -295,6 +305,22 @@ export const api = {
       ),
     runDiagnostics: () =>
       fetchJson<{ steps: DiagnosticStep[] }>("/jira/diagnostics"),
+    search: async (params: {
+      jql: string;
+      maxResults?: number;
+      fields?: string[];
+    }): Promise<JiraSearchResponse> => {
+      const res = await fetch(`${API_BASE}/jira/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new ApiError((body as { error?: string }).error || `API error: ${res.status}`, res.status, body);
+      }
+      return res.json();
+    },
   },
   github: {
     getRepos: () =>

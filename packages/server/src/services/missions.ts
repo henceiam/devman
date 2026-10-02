@@ -568,7 +568,8 @@ const WAYFINDER_TICKET_TYPES = ["research", "prototype", "grilling", "task"] as 
 
 function parseWayfinderTicketType(labels: string[]): WayfinderTicketType {
   for (const type of WAYFINDER_TICKET_TYPES) {
-    if (labels.includes(`wayfinder:${type}`)) return type;
+    // Accept both the legacy "wayfinder:type" and the newer "wayfinder-type" spellings.
+    if (labels.includes(`wayfinder:${type}`) || labels.includes(`wayfinder-${type}`)) return type;
   }
   return null;
 }
