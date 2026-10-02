@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import {
   api,
   type CopyProgressIssue,
@@ -6,6 +7,8 @@ import {
   type TranslationKeysDetail,
 } from "../api/client";
 import JiraLink from "./JiraLink";
+import CopyKeysPrototype, { COPY_KEYS_VARIANTS } from "./CopyKeysPrototype";
+import PrototypeSwitcher from "./PrototypeSwitcher";
 
 type TranslationKeysState =
   | { status: "loading" }
@@ -19,6 +22,8 @@ export default function CopyProgressPage() {
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
   const [expandedIssues, setExpandedIssues] = useState<Set<string>>(() => new Set());
   const [translationKeys, setTranslationKeys] = useState<Record<string, TranslationKeysState>>({});
+  const [searchParams] = useSearchParams();
+  const variant = searchParams.get("variant") ?? "A";
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -153,6 +158,7 @@ export default function CopyProgressPage() {
                           <TranslationKeysExpansion
                             issueKey={issue.key}
                             state={keyState}
+                            variant={variant}
                             onRetry={() => void loadTranslationKeys(issue.key)}
                             onSelectKey={(selectedKey) => {
                               setTranslationKeys((current) => {
@@ -182,6 +188,7 @@ export default function CopyProgressPage() {
           </table>
         </div>
       )}
+      <PrototypeSwitcher variants={COPY_KEYS_VARIANTS} current={variant} />
     </main>
   );
 }
@@ -189,11 +196,13 @@ export default function CopyProgressPage() {
 function TranslationKeysExpansion({
   issueKey,
   state,
+  variant,
   onRetry,
   onSelectKey,
 }: {
   issueKey: string;
   state: TranslationKeysState | undefined;
+  variant: string;
   onRetry: () => void;
   onSelectKey: (key: string) => void;
 }) {
@@ -231,6 +240,10 @@ function TranslationKeysExpansion({
         </pre>
       </div>
     );
+  }
+
+  if (variant !== "current") {
+    return <CopyKeysPrototype variant={variant} rows={state.detail.rows} />;
   }
 
   const selectedRow = state.detail.rows.find((row) => row.key === state.selectedKey)
